@@ -1,4 +1,6 @@
+import numpy as np
 import sounddevice as sd
+from scipy.io import wavfile
 
 
 class AudioRecorder:
@@ -30,3 +32,10 @@ class AudioRecorder:
         self._stream.stop()
         self._stream.close()
         self._recording = False
+
+    def save_wav(self, path):
+        if self._frames:
+            data = np.concatenate(self._frames)
+        else:
+            data = np.zeros((0, self.channels), dtype=np.float32)
+        wavfile.write(str(path), self.sample_rate, data)
