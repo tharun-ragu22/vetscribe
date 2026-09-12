@@ -35,9 +35,12 @@ class ApiClient:
             raise ApiClientError(f"backend returned {response.status_code}: {response.text}")
 
         data = response.json()
-        return SoapNote(
-            subjective=data["subjective"],
-            objective=data["objective"],
-            assessment=data["assessment"],
-            plan=data["plan"],
-        )
+        try:
+            return SoapNote(
+                subjective=data["subjective"],
+                objective=data["objective"],
+                assessment=data["assessment"],
+                plan=data["plan"],
+            )
+        except KeyError as exc:
+            raise ApiClientError(f"backend response missing field: {exc}") from exc

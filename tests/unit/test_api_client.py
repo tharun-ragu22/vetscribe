@@ -53,3 +53,15 @@ def test_generate_soap_note_raises_api_client_error_on_http_error_status():
 
     with pytest.raises(ApiClientError, match="500"):
         client.generate_soap_note(b"RIFF....")
+
+
+@respx.mock
+def test_generate_soap_note_raises_api_client_error_on_malformed_json():
+    respx.post("https://vetscribe.example.com/api/soap").mock(
+        return_value=httpx.Response(200, json={"subjective": "only one field present"})
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=5)
+
+    with pytest.raises(ApiClientError, match="objective"):
+        client.generate_soap_note(b"RIFF....")
