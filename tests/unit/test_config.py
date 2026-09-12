@@ -26,3 +26,24 @@ def test_config_loads_values_from_existing_file(tmp_path):
     assert config.api_endpoint == "https://vetscribe.example.com/api/soap"
     assert config.api_timeout_seconds == 45
     assert config.hotkey == "<ctrl>+<alt>+v"
+
+
+def test_config_fills_missing_keys_with_defaults(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"api_endpoint": "https://vetscribe.example.com/api/soap"}))
+
+    config = Config.load(config_path)
+
+    assert config.api_endpoint == "https://vetscribe.example.com/api/soap"
+    assert config.api_timeout_seconds == DEFAULT_CONFIG["api_timeout_seconds"]
+    assert config.hotkey == DEFAULT_CONFIG["hotkey"]
+
+
+def test_config_save_writes_json_that_can_be_reloaded(tmp_path):
+    config_path = tmp_path / "config.json"
+    config = Config(api_endpoint="https://vetscribe.example.com/api/soap", api_timeout_seconds=60, hotkey="<ctrl>+<alt>+v")
+
+    config.save(config_path)
+    reloaded = Config.load(config_path)
+
+    assert reloaded == config

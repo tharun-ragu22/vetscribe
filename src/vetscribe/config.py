@@ -18,5 +18,12 @@ class Config:
     def load(cls, path):
         if not path.exists():
             return cls(**DEFAULT_CONFIG)
-        values = json.loads(path.read_text())
+        values = {**DEFAULT_CONFIG, **json.loads(path.read_text())}
         return cls(**values)
+
+    def save(self, path):
+        path.write_text(json.dumps({
+            "api_endpoint": self.api_endpoint,
+            "api_timeout_seconds": self.api_timeout_seconds,
+            "hotkey": self.hotkey,
+        }))
