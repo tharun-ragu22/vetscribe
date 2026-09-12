@@ -20,3 +20,17 @@ def test_is_avimark_foreground_returns_false_for_other_windows(mocker):
     injector = AvimarkInjector()
 
     assert injector.is_avimark_foreground() is False
+
+
+def test_copy_to_clipboard_opens_empties_sets_and_closes_clipboard(mocker):
+    mock_win32clipboard = mocker.patch("vetscribe.avimark_injector.win32clipboard")
+
+    injector = AvimarkInjector()
+    injector.copy_to_clipboard("SUBJECTIVE: patient is doing well.")
+
+    mock_win32clipboard.OpenClipboard.assert_called_once_with()
+    mock_win32clipboard.EmptyClipboard.assert_called_once_with()
+    mock_win32clipboard.SetClipboardText.assert_called_once_with(
+        "SUBJECTIVE: patient is doing well.", mock_win32clipboard.CF_UNICODETEXT
+    )
+    mock_win32clipboard.CloseClipboard.assert_called_once_with()
