@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 
 DEFAULT_CONFIG = {
@@ -15,4 +16,7 @@ class Config:
 
     @classmethod
     def load(cls, path):
-        return cls(**DEFAULT_CONFIG)
+        if not path.exists():
+            return cls(**DEFAULT_CONFIG)
+        values = json.loads(path.read_text())
+        return cls(**values)
