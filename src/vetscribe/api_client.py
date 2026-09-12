@@ -21,12 +21,19 @@ class ApiClient:
         self.timeout_seconds = timeout_seconds
 
     def generate_soap_note(self, audio_bytes: bytes) -> SoapNote:
-        response = httpx.post(
-            self.endpoint,
-            content=audio_bytes,
-            headers={"Content-Type": "audio/wav"},
-            timeout=self.timeout_seconds,
-        )
+        try:
+            response = httpx.post(
+                self.endpoint,
+                content=audio_bytes,
+                headers={"Content-Type": "audio/wav"},
+                timeout=self.timeout_seconds,
+            )
+        except httpx.TimeoutException as exc:
+            raise ApiClientError(f"request timed out: {exc}") from exc
+
+        if response.status_code != 200:
+            raise ApiClientError(f"backend returned {response.status_code}: {response.text}")
+
         data = response.json()
         return SoapNote(
             subjective=data["subjective"],
