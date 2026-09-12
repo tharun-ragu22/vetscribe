@@ -1,4 +1,6 @@
+import win32api
 import win32clipboard
+import win32con
 import win32gui
 
 AVIMARK_TITLE_MARKER = "AVImark"
@@ -17,3 +19,16 @@ class AvimarkInjector:
             win32clipboard.SetClipboardText(text, win32clipboard.CF_UNICODETEXT)
         finally:
             win32clipboard.CloseClipboard()
+
+    def inject(self, text: str) -> bool:
+        if not self.is_avimark_foreground():
+            return False
+        self.copy_to_clipboard(text)
+        self._send_ctrl_v()
+        return True
+
+    def _send_ctrl_v(self):
+        win32api.keybd_event(win32con.VK_CONTROL, 0, 0, 0)
+        win32api.keybd_event(ord("V"), 0, 0, 0)
+        win32api.keybd_event(ord("V"), 0, win32con.KEYEVENTF_KEYUP, 0)
+        win32api.keybd_event(win32con.VK_CONTROL, 0, win32con.KEYEVENTF_KEYUP, 0)

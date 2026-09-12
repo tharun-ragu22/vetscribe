@@ -34,3 +34,28 @@ def test_copy_to_clipboard_opens_empties_sets_and_closes_clipboard(mocker):
         "SUBJECTIVE: patient is doing well.", mock_win32clipboard.CF_UNICODETEXT
     )
     mock_win32clipboard.CloseClipboard.assert_called_once_with()
+
+
+def test_inject_returns_false_and_does_not_copy_when_avimark_not_foreground(mocker):
+    mocker.patch.object(AvimarkInjector, "is_avimark_foreground", return_value=False)
+    mock_copy = mocker.patch.object(AvimarkInjector, "copy_to_clipboard")
+
+    injector = AvimarkInjector()
+    result = injector.inject("SOAP TEXT")
+
+    assert result is False
+    mock_copy.assert_not_called()
+
+
+def test_inject_copies_and_sends_ctrl_v_when_avimark_foreground(mocker):
+    mocker.patch.object(AvimarkInjector, "is_avimark_foreground", return_value=True)
+    mock_copy = mocker.patch.object(AvimarkInjector, "copy_to_clipboard")
+    mock_win32api = mocker.patch("vetscribe.avimark_injector.win32api")
+    mocker.patch("vetscribe.avimark_injector.win32con")
+
+    injector = AvimarkInjector()
+    result = injector.inject("SOAP TEXT")
+
+    assert result is True
+    mock_copy.assert_called_once_with("SOAP TEXT")
+    assert mock_win32api.keybd_event.call_count == 4
