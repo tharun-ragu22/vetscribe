@@ -16,3 +16,8 @@ class AudioRecorder:
         self._stream = sd.InputStream(samplerate=self.sample_rate, channels=self.channels)
         self._stream.start()
         self._recording = True
+
+    def stop(self):
+        self._stream.stop()
+        self._stream.close()
+        self._recording = False
