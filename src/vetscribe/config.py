@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 DEFAULT_CONFIG = {
     "api_endpoint": "https://localhost:8443/api/soap",
@@ -22,8 +22,4 @@ class Config:
         return cls(**values)
 
     def save(self, path):
-        path.write_text(json.dumps({
-            "api_endpoint": self.api_endpoint,
-            "api_timeout_seconds": self.api_timeout_seconds,
-            "hotkey": self.hotkey,
-        }))
+        path.write_text(json.dumps(asdict(self)))
