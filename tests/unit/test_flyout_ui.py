@@ -53,3 +53,22 @@ def test_copy_to_clipboard_button_has_expected_label_and_invokes_callback(tk_roo
     assert flyout.copy_to_clipboard_button["text"] == "Copy to Clipboard"
     flyout.copy_to_clipboard_button.invoke()
     assert calls == ["copy"]
+
+
+def test_flyout_window_is_topmost(tk_root):
+    flyout = FlyoutWindow(
+        master=tk_root,
+        soap_text="text",
+        on_copy_and_inject=lambda: None,
+        on_copy_to_clipboard=lambda: None,
+    )
+
+    assert flyout.attributes("-topmost") == 1
+
+
+def test_bottom_right_geometry_places_window_in_bottom_right_corner_with_margin():
+    geometry = FlyoutWindow.bottom_right_geometry(
+        screen_width=1920, screen_height=1080, width=400, height=300, margin=20
+    )
+
+    assert geometry == "400x300+1500+760"
