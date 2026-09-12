@@ -25,3 +25,31 @@ def test_flyout_window_displays_soap_note_text(tk_root):
 
     assert "SUBJECTIVE: text" in displayed_text
     assert "PLAN: text" in displayed_text
+
+
+def test_copy_and_inject_button_has_expected_label_and_invokes_callback(tk_root):
+    calls = []
+    flyout = FlyoutWindow(
+        master=tk_root,
+        soap_text="text",
+        on_copy_and_inject=lambda: calls.append("inject"),
+        on_copy_to_clipboard=lambda: None,
+    )
+
+    assert flyout.copy_and_inject_button["text"] == "Copy & Inject to AVImark"
+    flyout.copy_and_inject_button.invoke()
+    assert calls == ["inject"]
+
+
+def test_copy_to_clipboard_button_has_expected_label_and_invokes_callback(tk_root):
+    calls = []
+    flyout = FlyoutWindow(
+        master=tk_root,
+        soap_text="text",
+        on_copy_and_inject=lambda: None,
+        on_copy_to_clipboard=lambda: calls.append("copy"),
+    )
+
+    assert flyout.copy_to_clipboard_button["text"] == "Copy to Clipboard"
+    flyout.copy_to_clipboard_button.invoke()
+    assert calls == ["copy"]
