@@ -9,7 +9,7 @@ class MockAvimarkWindow(tk.Tk):
         self.title(WINDOW_TITLE)
         self.text_widget = tk.Text(self)
         self.text_widget.pack(fill="both", expand=True)
-        self.text_widget.focus_set()
+        self.text_widget.focus_force()
 
 
 def main():

@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libportaudio2 python3-tk python3-dev xvfb
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Run tests (Linux, headless display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a uv run pytest -v
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: uv run pytest -v
