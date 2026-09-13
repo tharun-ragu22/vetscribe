@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from vetscribe.api_client import SoapNote
 from vetscribe.pipeline import Pipeline, PipelineState
 
 
@@ -21,3 +22,28 @@ def test_toggle_recording_from_idle_starts_recording():
 
     deps["recorder"].start.assert_called_once()
     assert pipeline.state == PipelineState.RECORDING
+
+
+def test_toggle_recording_from_recording_stops_and_injects_successfully():
+    soap_note = SoapNote(
+        subjective="sub", objective="obj", assessment="assess", plan="plan"
+    )
+    recorder = MagicMock(
+        save_wav=MagicMock(side_effect=lambda path: path.write_bytes(b"fake-wav"))
+    )
+    deps_overrides = dict(
+        recorder=recorder,
+        api_client=MagicMock(generate_soap_note=MagicMock(return_value=soap_note)),
+        injector=MagicMock(inject=MagicMock(return_value=True)),
+    )
+    pipeline, deps = make_pipeline(**deps_overrides)
+    pipeline.state = PipelineState.RECORDING
+
+    pipeline.toggle_recording()
+
+    deps["recorder"].stop.assert_called_once()
+    deps["recorder"].save_wav.assert_called_once()
+    deps["api_client"].generate_soap_note.assert_called_once()
+    deps["injector"].inject.assert_called_once()
+    deps["on_flyout_needed"].assert_not_called()
+    assert pipeline.state == PipelineState.IDLE
