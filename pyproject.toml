@@ -10,6 +10,7 @@ dependencies = [
     "scipy>=1.11.0",
     "httpx>=0.27.0",
     "pyperclip>=1.8.2",
+    "pynput>=1.7.6",
     "pywin32>=306; sys_platform == 'win32'",
     "pywinauto>=0.6.8; sys_platform == 'win32'",
 ]
