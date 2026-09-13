@@ -222,6 +222,10 @@ call sites can still be imported and exercised with mocks.
   reproducible installs. This includes the real Windows GUI acceptance tests
   (mock AVImark injection and safety-flyout fallback), so a green run means
   the app has been verified end-to-end on a genuine, fresh Windows machine.
+- **`test-backend`**: runs the `backend/` reference server's own test suite
+  (`uv sync --locked` + `uv run pytest -v` from within `backend/`) on
+  `ubuntu-latest`, independently of the `test` job above — provider calls are
+  `respx`-mocked so no real API keys are needed.
 - **`build-windows-exe`**: runs after `test` passes, builds a standalone
   `VetScribe` folder with PyInstaller (`build_spec/vetscribe.spec`), and
   uploads it as a workflow artifact. Producing the double-clickable

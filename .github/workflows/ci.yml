@@ -38,6 +38,24 @@ jobs:
         if: runner.os == 'Windows'
         run: uv run pytest -v
 
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Sync dependencies
+        working-directory: backend
+        run: uv sync --locked
+
+      - name: Run tests
+        working-directory: backend
+        run: uv run pytest -v
+
   build-windows-exe:
     needs: test
     runs-on: windows-latest
