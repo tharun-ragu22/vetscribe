@@ -7,7 +7,13 @@ WINDOW_TITLE = "AVImark - [Patient: Max (Golden Retriever)]"
 
 class MockAvimarkWindow(tk.Tk):
     def __init__(self, dump_path=None):
-        super().__init__()
+        try:
+            super().__init__()
+        except tk.TclError:
+            # Recreating a Tk root right after a prior one was destroyed can
+            # hit a one-shot Tcl interpreter init race on Windows; retrying
+            # once succeeds.
+            super().__init__()
         self.title(WINDOW_TITLE)
         self.dump_path = Path(dump_path) if dump_path else None
         self.text_widget = tk.Text(self)

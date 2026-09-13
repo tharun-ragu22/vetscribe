@@ -25,7 +25,7 @@ def test_falls_back_to_home_dot_vetscribe_when_not_windows(mocker):
 
 def test_falls_back_to_home_dot_vetscribe_on_windows_without_appdata_env(mocker):
     mocker.patch("vetscribe.paths.sys.platform", "win32")
-    mocker.patch.dict("vetscribe.paths.os.environ", {}, clear=True)
+    mocker.patch.dict("vetscribe.paths.os.environ", {"APPDATA": ""})
 
     result = get_appdata_base_dir()
 
