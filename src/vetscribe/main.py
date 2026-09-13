@@ -50,7 +50,9 @@ def build_app(config=None, tk_root=None):
     )
 
     tray_app = TrayApp(pipeline=pipeline)
-    hotkey_listener = HotkeyListener(on_trigger=tray_app.on_hotkey_triggered)
+    hotkey_listener = HotkeyListener(
+        on_trigger=tray_app.on_hotkey_triggered, hotkey=config.hotkey
+    )
     tray_app.attach_hotkey_listener(hotkey_listener)
 
     return tray_app, hotkey_listener, tk_root

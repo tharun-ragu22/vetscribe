@@ -19,6 +19,60 @@ def test_start_registers_ctrl_shift_r_hotkey_and_starts_listener(mocker):
     mock_listener.start.assert_called_once()
 
 
+def test_start_uses_custom_hotkey_passed_at_construction(mocker):
+    mock_global_hotkeys_cls = mocker.patch(
+        "vetscribe.hotkey_listener.keyboard.GlobalHotKeys"
+    )
+
+    listener = HotkeyListener(on_trigger=lambda: None, hotkey="<ctrl>+<alt>+v")
+    listener.start()
+
+    args, kwargs = mock_global_hotkeys_cls.call_args
+    hotkey_map = args[0] if args else kwargs["hotkey_map"]
+    assert "<ctrl>+<alt>+v" in hotkey_map
+    assert "<ctrl>+<shift>+r" not in hotkey_map
+
+
+def test_update_hotkey_while_running_stops_old_listener_and_starts_new_binding(mocker):
+    mock_global_hotkeys_cls = mocker.patch(
+        "vetscribe.hotkey_listener.keyboard.GlobalHotKeys"
+    )
+    first_listener = mock_global_hotkeys_cls.return_value
+
+    listener = HotkeyListener(on_trigger=lambda: None)
+    listener.start()
+
+    second_listener = mocker.Mock()
+    mock_global_hotkeys_cls.return_value = second_listener
+
+    listener.update_hotkey("<ctrl>+<alt>+v")
+
+    first_listener.stop.assert_called_once()
+    args, kwargs = mock_global_hotkeys_cls.call_args
+    hotkey_map = args[0] if args else kwargs["hotkey_map"]
+    assert "<ctrl>+<alt>+v" in hotkey_map
+    second_listener.start.assert_called_once()
+    assert listener.hotkey == "<ctrl>+<alt>+v"
+
+
+def test_update_hotkey_when_not_started_only_updates_pending_hotkey(mocker):
+    mock_global_hotkeys_cls = mocker.patch(
+        "vetscribe.hotkey_listener.keyboard.GlobalHotKeys"
+    )
+
+    listener = HotkeyListener(on_trigger=lambda: None)
+    listener.update_hotkey("<ctrl>+<alt>+v")
+
+    mock_global_hotkeys_cls.assert_not_called()
+    assert listener.hotkey == "<ctrl>+<alt>+v"
+
+    listener.start()
+
+    args, kwargs = mock_global_hotkeys_cls.call_args
+    hotkey_map = args[0] if args else kwargs["hotkey_map"]
+    assert "<ctrl>+<alt>+v" in hotkey_map
+
+
 def test_handle_trigger_invokes_on_trigger_callback():
     calls = []
     listener = HotkeyListener(on_trigger=lambda: calls.append("triggered"))

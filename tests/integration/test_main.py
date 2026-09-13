@@ -41,6 +41,19 @@ def test_build_app_wires_hotkey_listener_to_tray_app_trigger():
     assert tray_app.hotkey_listener is hotkey_listener
 
 
+def test_build_app_wires_configured_hotkey_into_hotkey_listener():
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<alt>+v",
+    )
+    tk_root = MagicMock()
+
+    _tray_app, hotkey_listener, _ = build_app(config=config, tk_root=tk_root)
+
+    assert hotkey_listener.hotkey == "<ctrl>+<alt>+v"
+
+
 def test_build_app_flyout_callback_creates_flyout_window_on_injection_failure(mocker):
     mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
     config = Config(
