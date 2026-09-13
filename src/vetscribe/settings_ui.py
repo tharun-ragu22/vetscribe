@@ -13,6 +13,7 @@ class SettingsWindow(tk.Toplevel):
         self.api_key_var = tk.StringVar(value=config.api_key)
         self.hotkey_var = tk.StringVar(value=config.hotkey)
         self.target_window_var = tk.StringVar(value=config.target_window_matcher)
+        self.launch_on_startup_var = tk.BooleanVar(value=config.launch_on_startup)
 
         tk.Label(self, text="API Endpoint URL").pack()
         self.endpoint_entry = tk.Entry(self, textvariable=self.endpoint_var)
@@ -30,6 +31,13 @@ class SettingsWindow(tk.Toplevel):
         self.target_window_entry = tk.Entry(self, textvariable=self.target_window_var)
         self.target_window_entry.pack()
 
+        self.launch_on_startup_checkbox = tk.Checkbutton(
+            self,
+            text="Launch VetScribe on Windows Startup",
+            variable=self.launch_on_startup_var,
+        )
+        self.launch_on_startup_checkbox.pack()
+
         self.save_button = tk.Button(self, text="Save", command=self._on_save_clicked)
         self.save_button.pack()
 
@@ -40,6 +48,7 @@ class SettingsWindow(tk.Toplevel):
             api_key=self.api_key_var.get(),
             hotkey=self.hotkey_var.get(),
             target_window_matcher=self.target_window_var.get(),
+            launch_on_startup=self.launch_on_startup_var.get(),
         )
         self.on_save(new_config)
         self.destroy()

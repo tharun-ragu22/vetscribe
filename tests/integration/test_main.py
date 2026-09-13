@@ -1,3 +1,4 @@
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 from vetscribe.api_client import ApiClient
@@ -118,6 +119,7 @@ def test_open_settings_opens_settings_window_with_current_config(mocker):
 
 def test_saving_settings_persists_config_and_updates_live_components(mocker, tmp_path):
     mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
+    mocker.patch("vetscribe.main.autostart")
     mocker.patch("vetscribe.hotkey_listener.keyboard.GlobalHotKeys")
     config_path = tmp_path / "config.json"
     mocker.patch("vetscribe.main.CONFIG_PATH", config_path)
@@ -156,3 +158,29 @@ def test_saving_settings_persists_config_and_updates_live_components(mocker, tmp
     reloaded = Config.load(config_path)
     assert reloaded.api_endpoint == "https://new.example.test/soap"
     assert reloaded.hotkey == "<ctrl>+<alt>+v"
+
+
+def test_saving_settings_enables_autostart_when_launch_on_startup_checked(mocker, tmp_path):
+    mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
+    mock_enable = mocker.patch("vetscribe.main.autostart.enable")
+    mock_disable = mocker.patch("vetscribe.main.autostart.disable")
+    mocker.patch("vetscribe.hotkey_listener.keyboard.GlobalHotKeys")
+    mocker.patch("vetscribe.main.CONFIG_PATH", tmp_path / "config.json")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, hotkey_listener, _ = build_app(config=config, tk_root=tk_root)
+    hotkey_listener.start()
+    tray_app.open_settings()
+    apply_settings = mock_settings_cls.call_args.kwargs["on_save"]
+
+    apply_settings(replace(config, launch_on_startup=True))
+    mock_enable.assert_called_once()
+    mock_disable.assert_not_called()
+
+    apply_settings(replace(config, launch_on_startup=False))
+    mock_disable.assert_called_once()

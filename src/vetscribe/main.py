@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pyperclip
 
+from vetscribe import autostart
 from vetscribe.api_client import ApiClient
 from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
@@ -67,6 +68,10 @@ def build_app(config=None, tk_root=None):
         api_client.api_key = new_config.api_key
         injector.title_marker = new_config.target_window_matcher
         hotkey_listener.update_hotkey(new_config.hotkey)
+        if new_config.launch_on_startup:
+            autostart.enable(autostart.default_launch_command())
+        else:
+            autostart.disable()
         current_config["value"] = new_config
 
     def open_settings():

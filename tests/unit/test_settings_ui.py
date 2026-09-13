@@ -33,6 +33,7 @@ def test_settings_window_prefills_fields_from_config(tk_root):
         api_key="secret",
         hotkey="<ctrl>+<alt>+v",
         target_window_matcher="PracticeSoft",
+        launch_on_startup=True,
     )
 
     window = SettingsWindow(master=tk_root, config=config, on_save=lambda c: None)
@@ -41,6 +42,7 @@ def test_settings_window_prefills_fields_from_config(tk_root):
     assert window.api_key_var.get() == "secret"
     assert window.hotkey_var.get() == "<ctrl>+<alt>+v"
     assert window.target_window_var.get() == "PracticeSoft"
+    assert window.launch_on_startup_var.get() is True
 
 
 def test_save_button_builds_config_from_edited_form_and_calls_on_save(tk_root):
@@ -52,6 +54,7 @@ def test_save_button_builds_config_from_edited_form_and_calls_on_save(tk_root):
     window.api_key_var.set("new-secret")
     window.hotkey_var.set("<ctrl>+<alt>+r")
     window.target_window_var.set("PracticeSoft")
+    window.launch_on_startup_var.set(True)
 
     window.save_button.invoke()
 
@@ -61,6 +64,7 @@ def test_save_button_builds_config_from_edited_form_and_calls_on_save(tk_root):
     assert new_config.api_key == "new-secret"
     assert new_config.hotkey == "<ctrl>+<alt>+r"
     assert new_config.target_window_matcher == "PracticeSoft"
+    assert new_config.launch_on_startup is True
     assert new_config.api_timeout_seconds == config.api_timeout_seconds
 
 
