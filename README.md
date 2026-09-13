@@ -112,6 +112,9 @@ expected to accept a `POST` with raw WAV bytes (`Content-Type: audio/wav`,
 plus `Authorization: Bearer <api_key>` if `api_key` is set) and return JSON
 with `subjective`, `objective`, `assessment`, and `plan` fields.
 
+A reference implementation of this backend, with pluggable OpenAI/Anthropic/Gemini
+providers for transcription and note generation, lives in [`backend/`](backend/README.md).
+
 ### Running
 
 ```bash

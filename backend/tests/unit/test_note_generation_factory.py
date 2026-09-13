@@ -1,0 +1,26 @@
+import pytest
+
+from vetscribe_backend.note_generation import UnknownProviderError, get_note_generator
+from vetscribe_backend.note_generation.anthropic_note_generator import AnthropicNoteGenerator
+from vetscribe_backend.note_generation.gemini_note_generator import GeminiNoteGenerator
+from vetscribe_backend.note_generation.openai_note_generator import OpenAiNoteGenerator
+
+
+def test_get_note_generator_returns_openai_generator(make_config):
+    generator = get_note_generator(make_config(note_provider="openai"))
+    assert isinstance(generator, OpenAiNoteGenerator)
+
+
+def test_get_note_generator_returns_anthropic_generator(make_config):
+    generator = get_note_generator(make_config(note_provider="anthropic"))
+    assert isinstance(generator, AnthropicNoteGenerator)
+
+
+def test_get_note_generator_returns_gemini_generator(make_config):
+    generator = get_note_generator(make_config(note_provider="gemini"))
+    assert isinstance(generator, GeminiNoteGenerator)
+
+
+def test_get_note_generator_raises_on_unknown_provider(make_config):
+    with pytest.raises(UnknownProviderError, match="carrier-pigeon"):
+        get_note_generator(make_config(note_provider="carrier-pigeon"))
