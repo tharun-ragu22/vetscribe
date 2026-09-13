@@ -71,3 +71,14 @@ def test_toggle_recording_from_recording_calls_flyout_when_injection_fails():
     assert "SUBJECTIVE: sub" in called_text
     assert "PLAN: plan" in called_text
     assert pipeline.state == PipelineState.IDLE
+
+
+def test_toggle_recording_is_noop_while_processing():
+    pipeline, deps = make_pipeline()
+    pipeline.state = PipelineState.PROCESSING
+
+    pipeline.toggle_recording()
+
+    deps["recorder"].start.assert_not_called()
+    deps["recorder"].stop.assert_not_called()
+    assert pipeline.state == PipelineState.PROCESSING
