@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -19,16 +20,45 @@ MOCK_AVIMARK_SCRIPT = Path(__file__).parent / "mock_avimark.py"
 
 
 @pytest.fixture
-def mock_avimark_window():
-    app = Application(backend="win32").start(
-        f'"{sys.executable}" "{MOCK_AVIMARK_SCRIPT}"', wait_for_idle=False
+def mock_avimark_window(tmp_path):
+    log_path = tmp_path / "mock_avimark_output.log"
+    log_file = log_path.open("w")
+    process = subprocess.Popen(
+        [sys.executable, str(MOCK_AVIMARK_SCRIPT)],
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
     )
+
+    app = Application(backend="win32")
+    connected = False
+    for _ in range(50):
+        if process.poll() is not None:
+            pytest.fail(
+                f"mock AVImark process exited early with code {process.returncode}:\n"
+                f"{log_path.read_text()}"
+            )
+        try:
+            app.connect(title=WINDOW_TITLE, timeout=1)
+            connected = True
+            break
+        except Exception:
+            time.sleep(0.2)
+
+    if not connected:
+        pytest.fail(f"could not find mock AVImark window:\n{log_path.read_text()}")
+
     window = app.window(title=WINDOW_TITLE)
     window.wait("visible", timeout=10)
     window.set_focus()
     time.sleep(0.2)
     yield window
-    app.kill()
+
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+    log_file.close()
 
 
 def test_full_pipeline_injects_soap_note_into_focused_avimark_window(mock_avimark_window):
