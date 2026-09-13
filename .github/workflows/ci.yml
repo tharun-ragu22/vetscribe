@@ -37,3 +37,29 @@ jobs:
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: uv run pytest -v
+
+  build-windows-exe:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Install PyInstaller
+        run: uv pip install pyinstaller
+
+      - name: Build VetScribe.exe (--onedir)
+        run: uv run pyinstaller build_spec/vetscribe.spec --distpath dist --workpath build
+
+      - name: Upload VetScribe.exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VetScribe-windows
+          path: dist/VetScribe
