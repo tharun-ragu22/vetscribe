@@ -22,9 +22,10 @@ MOCK_AVIMARK_SCRIPT = Path(__file__).parent / "mock_avimark.py"
 @pytest.fixture
 def mock_avimark_window(tmp_path):
     log_path = tmp_path / "mock_avimark_output.log"
+    dump_path = tmp_path / "mock_avimark_dump.txt"
     log_file = log_path.open("w")
     process = subprocess.Popen(
-        [sys.executable, str(MOCK_AVIMARK_SCRIPT)],
+        [sys.executable, str(MOCK_AVIMARK_SCRIPT), str(dump_path)],
         stdout=log_file,
         stderr=subprocess.STDOUT,
     )
@@ -51,7 +52,7 @@ def mock_avimark_window(tmp_path):
     window.wait("visible", timeout=10)
     window.set_focus()
     time.sleep(0.2)
-    yield window
+    yield window, dump_path
 
     process.terminate()
     try:
@@ -62,6 +63,7 @@ def mock_avimark_window(tmp_path):
 
 
 def test_full_pipeline_injects_soap_note_into_focused_avimark_window(mock_avimark_window):
+    _window, dump_path = mock_avimark_window
     recorder = MagicMock()
     recorder.save_wav.side_effect = lambda path: Path(path).write_bytes(b"fake-audio")
     api_client = MagicMock()
@@ -84,7 +86,13 @@ def test_full_pipeline_injects_soap_note_into_focused_avimark_window(mock_avimar
     pipeline.toggle_recording()
 
     on_flyout_needed.assert_not_called()
-    injected_text = mock_avimark_window.child_window(control_type="Edit").get_value()
+
+    for _ in range(50):
+        if dump_path.exists():
+            break
+        time.sleep(0.1)
+
+    injected_text = dump_path.read_text()
     assert "SUBJECTIVE" in injected_text
     assert "OBJECTIVE" in injected_text
     assert "ASSESSMENT" in injected_text
