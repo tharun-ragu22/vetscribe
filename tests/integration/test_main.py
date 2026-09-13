@@ -72,3 +72,23 @@ def test_build_app_flyout_callback_creates_flyout_window_on_injection_failure(mo
     _, kwargs = mock_flyout_cls.call_args
     assert kwargs["master"] is tk_root
     assert kwargs["soap_text"] == "SUBJECTIVE: text"
+
+
+def test_build_app_error_callback_shows_flyout_with_error_message(mocker):
+    mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    pipeline = tray_app.pipeline
+
+    pipeline.on_error("SOAP Generation Failed: backend unreachable.")
+
+    mock_flyout_cls.assert_called_once()
+    _, kwargs = mock_flyout_cls.call_args
+    assert kwargs["master"] is tk_root
+    assert kwargs["soap_text"] == "SOAP Generation Failed: backend unreachable."

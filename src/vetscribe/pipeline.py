@@ -1,6 +1,9 @@
 import enum
 import tempfile
+from datetime import datetime
 from pathlib import Path
+
+from vetscribe.api_client import ApiClientError
 
 
 class PipelineState(enum.Enum):
@@ -19,11 +22,23 @@ def format_soap_text(soap_note) -> str:
 
 
 class Pipeline:
-    def __init__(self, recorder, api_client, injector, on_flyout_needed):
+    def __init__(
+        self,
+        recorder,
+        api_client,
+        injector,
+        on_flyout_needed,
+        on_error=None,
+        recordings_dir=None,
+    ):
         self.recorder = recorder
         self.api_client = api_client
         self.injector = injector
         self.on_flyout_needed = on_flyout_needed
+        self.on_error = on_error or (lambda message: None)
+        self.recordings_dir = Path(recordings_dir) if recordings_dir else (
+            Path.home() / ".vetscribe" / "recordings"
+        )
         self.state = PipelineState.IDLE
         self.last_soap_text = None
 
@@ -43,7 +58,16 @@ class Pipeline:
             self.recorder.save_wav(wav_path)
             audio_bytes = wav_path.read_bytes()
 
-        soap_note = self.api_client.generate_soap_note(audio_bytes)
+        try:
+            soap_note = self.api_client.generate_soap_note(audio_bytes)
+        except ApiClientError as exc:
+            saved_path = self._save_failed_audio(audio_bytes)
+            self.on_error(
+                f"SOAP Generation Failed: {exc}. Raw audio saved locally to {saved_path}."
+            )
+            self.state = PipelineState.IDLE
+            return
+
         soap_text = format_soap_text(soap_note)
         self.last_soap_text = soap_text
 
@@ -52,3 +76,10 @@ class Pipeline:
             self.on_flyout_needed(soap_text)
 
         self.state = PipelineState.IDLE
+
+    def _save_failed_audio(self, audio_bytes):
+        self.recordings_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        path = self.recordings_dir / f"failed_{timestamp}.wav"
+        path.write_bytes(audio_bytes)
+        return path

@@ -47,6 +47,7 @@ def build_app(config=None, tk_root=None):
         api_client=api_client,
         injector=injector,
         on_flyout_needed=lambda soap_text: show_flyout(tk_root, injector, soap_text),
+        on_error=lambda message: show_flyout(tk_root, injector, message),
     )
 
     tray_app = TrayApp(pipeline=pipeline)
