@@ -29,6 +29,7 @@ class ApiClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
+        logger.info("POST %s (timeout=%ss)", self.endpoint, self.timeout_seconds)
         try:
             response = httpx.post(
                 self.endpoint,

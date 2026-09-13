@@ -49,9 +49,11 @@ class Pipeline:
 
     def toggle_recording(self):
         if self.state == PipelineState.IDLE:
+            logger.info("recording started")
             self.recorder.start()
             self.state = PipelineState.RECORDING
         elif self.state == PipelineState.RECORDING:
+            logger.info("recording stopped, processing")
             self._stop_and_process()
 
     def _stop_and_process(self):
@@ -63,6 +65,7 @@ class Pipeline:
             self.recorder.save_wav(wav_path)
             audio_bytes = wav_path.read_bytes()
 
+        logger.info("sending %d bytes of audio to backend", len(audio_bytes))
         try:
             soap_note = self.api_client.generate_soap_note(audio_bytes)
         except ApiClientError as exc:
@@ -80,12 +83,14 @@ class Pipeline:
         self.last_soap_text = soap_text
         logger.info("SOAP note generated successfully")
 
+        logger.info("attempting to inject SOAP note into AVImark")
         injected = self.injector.inject(soap_text)
         logger.info("AVImark injection %s", "succeeded" if injected else "failed, showing flyout")
         if not injected:
             self.on_flyout_needed(soap_text)
 
         self.state = PipelineState.IDLE
+        logger.info("done, back to idle")
 
     def _save_failed_audio(self, audio_bytes):
         self.recordings_dir.mkdir(parents=True, exist_ok=True)

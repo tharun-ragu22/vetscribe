@@ -1,7 +1,11 @@
+import logging
+
 import pystray
 from PIL import Image, ImageDraw
 
 from vetscribe.pipeline import PipelineState
+
+logger = logging.getLogger("vetscribe.tray_app")
 
 ICON_SIZE = 64
 
@@ -59,7 +63,11 @@ class TrayApp:
         self.icon.icon = build_icon_image(STATE_COLORS[self.pipeline.state])
 
     def on_hotkey_triggered(self):
+        previous_state = self.pipeline.state
         self.pipeline.toggle_recording()
+        logger.info(
+            "state transition: %s -> %s", previous_state.value, self.pipeline.state.value
+        )
         self.update_icon_for_state()
 
     def open_last_note(self):
@@ -70,6 +78,7 @@ class TrayApp:
         self.on_open_settings()
 
     def quit(self):
+        logger.info("shutting down")
         if self.hotkey_listener is not None:
             self.hotkey_listener.stop()
         if self.pipeline.state == PipelineState.RECORDING:

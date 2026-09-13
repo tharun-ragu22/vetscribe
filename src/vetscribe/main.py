@@ -1,3 +1,4 @@
+import logging
 import tkinter as tk
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from vetscribe.offline_queue import OfflineQueue
 from vetscribe.pipeline import Pipeline
 from vetscribe.settings_ui import SettingsWindow
 from vetscribe.tray_app import TrayApp
+
+logger = logging.getLogger("vetscribe.main")
 
 CONFIG_PATH = Path.home() / ".vetscribe" / "config.json"
 
@@ -91,9 +94,11 @@ def build_app(config=None, tk_root=None):
 
 def run():
     build_logger()
+    logger.info("VetScribe starting up")
     tray_app, hotkey_listener, _ = build_app()
     hotkey_listener.start()
     tray_app.offline_queue.start()
+    logger.info("offline retry queue started, ready for hotkey")
     tray_app.icon.run()
 
 

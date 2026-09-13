@@ -1,6 +1,9 @@
+import logging
 import threading
 
 from pynput import keyboard
+
+logger = logging.getLogger("vetscribe.hotkey_listener")
 
 HOTKEY = "<ctrl>+<shift>+r"
 
@@ -15,6 +18,7 @@ class HotkeyListener:
     def start(self):
         self._listener = keyboard.GlobalHotKeys({self.hotkey: self._handle_trigger})
         self._listener.start()
+        logger.info("listening for hotkey %s", self.hotkey)
 
     def stop(self):
         if self._listener is not None:
@@ -28,5 +32,6 @@ class HotkeyListener:
             self.start()
 
     def _handle_trigger(self):
+        logger.info("hotkey %s triggered", self.hotkey)
         with self._lock:
             self.on_trigger()

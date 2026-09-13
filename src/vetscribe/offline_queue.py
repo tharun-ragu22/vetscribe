@@ -37,8 +37,14 @@ class OfflineQueue:
         return sorted(self.queue_dir.glob("queued_*.wav"))
 
     def process_once(self):
+        pending = self.queued_files()
+        if not pending:
+            logger.debug("retry poll: no queued recordings")
+            return []
+        logger.info("retry poll: %d queued recording(s) pending", len(pending))
+
         processed = []
-        for path in self.queued_files():
+        for path in pending:
             audio_bytes = path.read_bytes()
             try:
                 soap_note = self.api_client.generate_soap_note(audio_bytes)
