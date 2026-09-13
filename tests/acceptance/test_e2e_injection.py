@@ -20,7 +20,9 @@ MOCK_AVIMARK_SCRIPT = Path(__file__).parent / "mock_avimark.py"
 
 @pytest.fixture
 def mock_avimark_window():
-    app = Application(backend="win32").start(f"{sys.executable} {MOCK_AVIMARK_SCRIPT}")
+    app = Application(backend="win32").start(
+        f'"{sys.executable}" "{MOCK_AVIMARK_SCRIPT}"', wait_for_idle=False
+    )
     window = app.window(title=WINDOW_TITLE)
     window.wait("visible", timeout=10)
     window.set_focus()
