@@ -37,9 +37,9 @@ class ApiClient:
                 headers=headers,
                 timeout=self.timeout_seconds,
             )
-        except httpx.TimeoutException as exc:
-            logger.error("backend request timed out: %s", exc)
-            raise ApiClientError(f"request timed out: {exc}") from exc
+        except httpx.RequestError as exc:
+            logger.error("backend request failed: %s", exc)
+            raise ApiClientError(f"request failed: {exc}") from exc
 
         logger.info("backend responded with status %s", response.status_code)
         if response.status_code != 200:
