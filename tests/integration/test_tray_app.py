@@ -117,3 +117,21 @@ def test_quit_does_not_stop_recorder_when_not_recording():
 
     pipeline.recorder.stop.assert_not_called()
     tray_app.icon.stop.assert_called_once()
+
+
+def test_quit_stops_attached_offline_queue():
+    tray_app, _pipeline = make_tray_app(state=PipelineState.IDLE)
+    tray_app.icon.stop = MagicMock()
+    offline_queue = MagicMock()
+    tray_app.attach_offline_queue(offline_queue)
+
+    tray_app.quit()
+
+    offline_queue.stop.assert_called_once()
+
+
+def test_quit_without_attached_offline_queue_does_not_raise():
+    tray_app, _pipeline = make_tray_app(state=PipelineState.IDLE)
+    tray_app.icon.stop = MagicMock()
+
+    tray_app.quit()

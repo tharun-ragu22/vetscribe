@@ -11,6 +11,7 @@ from vetscribe.config import Config
 from vetscribe.flyout_ui import FlyoutWindow
 from vetscribe.hotkey_listener import HotkeyListener
 from vetscribe.logger import build_logger
+from vetscribe.offline_queue import OfflineQueue
 from vetscribe.pipeline import Pipeline
 from vetscribe.settings_ui import SettingsWindow
 from vetscribe.tray_app import TrayApp
@@ -44,6 +45,10 @@ def build_app(config=None, tk_root=None):
     recorder = AudioRecorder()
     api_client = ApiClient(config.api_endpoint, config.api_timeout_seconds, config.api_key)
     injector = AvimarkInjector(title_marker=config.target_window_matcher)
+    offline_queue = OfflineQueue(
+        api_client=api_client,
+        on_note_ready=lambda soap_text: show_flyout(tk_root, injector, soap_text),
+    )
 
     pipeline = Pipeline(
         recorder=recorder,
@@ -51,9 +56,11 @@ def build_app(config=None, tk_root=None):
         injector=injector,
         on_flyout_needed=lambda soap_text: show_flyout(tk_root, injector, soap_text),
         on_error=lambda message: show_flyout(tk_root, injector, message),
+        offline_queue=offline_queue,
     )
 
     tray_app = TrayApp(pipeline=pipeline)
+    tray_app.attach_offline_queue(offline_queue)
     hotkey_listener = HotkeyListener(
         on_trigger=tray_app.on_hotkey_triggered, hotkey=config.hotkey
     )
@@ -86,6 +93,7 @@ def run():
     build_logger()
     tray_app, hotkey_listener, _ = build_app()
     hotkey_listener.start()
+    tray_app.offline_queue.start()
     tray_app.icon.run()
 
 

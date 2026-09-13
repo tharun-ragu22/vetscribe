@@ -119,6 +119,28 @@ def test_toggle_recording_saves_audio_and_reports_error_when_backend_fails(tmp_p
     assert str(saved_files[0]) in message
 
 
+def test_toggle_recording_enqueues_audio_to_offline_queue_on_backend_failure(tmp_path):
+    recorder = MagicMock(
+        save_wav=MagicMock(side_effect=lambda path: path.write_bytes(b"fake-wav-bytes"))
+    )
+    offline_queue = MagicMock()
+    deps_overrides = dict(
+        recorder=recorder,
+        api_client=MagicMock(
+            generate_soap_note=MagicMock(side_effect=ApiClientError("backend unreachable"))
+        ),
+        recordings_dir=tmp_path / "recordings",
+        offline_queue=offline_queue,
+    )
+    pipeline, deps = make_pipeline(**deps_overrides)
+    pipeline.state = PipelineState.RECORDING
+
+    pipeline.toggle_recording()
+
+    offline_queue.enqueue.assert_called_once_with(b"fake-wav-bytes")
+    assert pipeline.state == PipelineState.IDLE
+
+
 def test_toggle_recording_does_not_crash_when_on_error_not_provided(tmp_path):
     recorder = MagicMock(
         save_wav=MagicMock(side_effect=lambda path: path.write_bytes(b"fake-wav-bytes"))

@@ -23,6 +23,7 @@ class TrayApp:
     def __init__(self, pipeline, on_open_settings=None, on_show_note=None):
         self.pipeline = pipeline
         self.hotkey_listener = None
+        self.offline_queue = None
         self.on_open_settings = on_open_settings or (lambda: None)
         self.on_show_note = on_show_note or (lambda soap_text: None)
         self.icon = pystray.Icon(
@@ -51,6 +52,9 @@ class TrayApp:
     def attach_hotkey_listener(self, hotkey_listener):
         self.hotkey_listener = hotkey_listener
 
+    def attach_offline_queue(self, offline_queue):
+        self.offline_queue = offline_queue
+
     def update_icon_for_state(self):
         self.icon.icon = build_icon_image(STATE_COLORS[self.pipeline.state])
 
@@ -70,4 +74,6 @@ class TrayApp:
             self.hotkey_listener.stop()
         if self.pipeline.state == PipelineState.RECORDING:
             self.pipeline.recorder.stop()
+        if self.offline_queue is not None:
+            self.offline_queue.stop()
         self.icon.stop()

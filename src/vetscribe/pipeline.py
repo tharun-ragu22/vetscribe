@@ -33,6 +33,7 @@ class Pipeline:
         on_flyout_needed,
         on_error=None,
         recordings_dir=None,
+        offline_queue=None,
     ):
         self.recorder = recorder
         self.api_client = api_client
@@ -42,6 +43,7 @@ class Pipeline:
         self.recordings_dir = Path(recordings_dir) if recordings_dir else (
             Path.home() / ".vetscribe" / "recordings"
         )
+        self.offline_queue = offline_queue
         self.state = PipelineState.IDLE
         self.last_soap_text = None
 
@@ -66,6 +68,8 @@ class Pipeline:
         except ApiClientError as exc:
             saved_path = self._save_failed_audio(audio_bytes)
             logger.error("SOAP generation failed: %s (audio saved to %s)", exc, saved_path)
+            if self.offline_queue is not None:
+                self.offline_queue.enqueue(audio_bytes)
             self.on_error(
                 f"SOAP Generation Failed: {exc}. Raw audio saved locally to {saved_path}."
             )

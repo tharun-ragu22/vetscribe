@@ -184,3 +184,35 @@ def test_saving_settings_enables_autostart_when_launch_on_startup_checked(mocker
 
     apply_settings(replace(config, launch_on_startup=False))
     mock_disable.assert_called_once()
+
+
+def test_build_app_wires_offline_queue_into_pipeline_and_tray_app():
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+
+    assert tray_app.offline_queue is tray_app.pipeline.offline_queue
+    assert tray_app.offline_queue.api_client is tray_app.pipeline.api_client
+
+
+def test_build_app_offline_queue_on_note_ready_shows_flyout(mocker):
+    mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    tray_app.offline_queue.on_note_ready("SUBJECTIVE: recovered note")
+
+    mock_flyout_cls.assert_called_once()
+    _, kwargs = mock_flyout_cls.call_args
+    assert kwargs["master"] is tk_root
+    assert kwargs["soap_text"] == "SUBJECTIVE: recovered note"
