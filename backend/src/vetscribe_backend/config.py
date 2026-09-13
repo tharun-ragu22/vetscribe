@@ -1,6 +1,8 @@
 import os
 from dataclasses import dataclass
 
+from dotenv import find_dotenv, load_dotenv
+
 
 @dataclass
 class BackendConfig:
@@ -18,6 +20,7 @@ class BackendConfig:
 
     @classmethod
     def from_env(cls) -> "BackendConfig":
+        load_dotenv(find_dotenv(usecwd=True))
         return cls(
             transcription_provider=os.environ.get("VETSCRIBE_TRANSCRIPTION_PROVIDER", "openai"),
             note_provider=os.environ.get("VETSCRIBE_NOTE_PROVIDER", "openai"),

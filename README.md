@@ -115,6 +115,25 @@ with `subjective`, `objective`, `assessment`, and `plan` fields.
 A reference implementation of this backend, with pluggable OpenAI/Anthropic/Gemini
 providers for transcription and note generation, lives in [`backend/`](backend/README.md).
 
+#### Pointing VetScribe at the reference backend
+
+1. Start the backend (see [`backend/README.md`](backend/README.md) for provider setup):
+   ```bash
+   cd backend
+   uv sync
+   VETSCRIBE_NOTE_PROVIDER=anthropic ANTHROPIC_API_KEY=sk-ant-... \
+     uv run python -m vetscribe_backend.main
+   ```
+   By default it listens on `http://localhost:8443/api/soap` — plain HTTP, no TLS.
+2. In VetScribe's tray menu, open **Settings** and set:
+   - **API Endpoint URL** to `http://localhost:8443/api/soap` (note `http://`, not the
+     `https://` default — the reference backend doesn't terminate TLS itself; put a
+     reverse proxy in front of it for anything beyond local testing).
+   - **API Key / Token** to the same value as the backend's `VETSCRIBE_BACKEND_API_KEY`
+     env var, if you set one (leave blank if you didn't — the backend then accepts
+     unauthenticated requests).
+3. Save. The change applies immediately, no restart needed — press the hotkey to test.
+
 ### Running
 
 ```bash

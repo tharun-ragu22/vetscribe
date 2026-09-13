@@ -1,6 +1,30 @@
 from vetscribe_backend.config import BackendConfig
 
 
+def test_from_env_loads_values_from_dotenv_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("VETSCRIBE_NOTE_PROVIDER", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    (tmp_path / ".env").write_text(
+        "VETSCRIBE_NOTE_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-from-dotenv\n"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    config = BackendConfig.from_env()
+
+    assert config.note_provider == "anthropic"
+    assert config.anthropic_api_key == "sk-from-dotenv"
+
+
+def test_from_env_prefers_real_env_var_over_dotenv_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("VETSCRIBE_NOTE_PROVIDER", "gemini")
+    (tmp_path / ".env").write_text("VETSCRIBE_NOTE_PROVIDER=anthropic\n")
+    monkeypatch.chdir(tmp_path)
+
+    config = BackendConfig.from_env()
+
+    assert config.note_provider == "gemini"
+
+
 def test_from_env_reads_provider_selection_and_keys(monkeypatch):
     monkeypatch.setenv("VETSCRIBE_TRANSCRIPTION_PROVIDER", "gemini")
     monkeypatch.setenv("VETSCRIBE_NOTE_PROVIDER", "anthropic")

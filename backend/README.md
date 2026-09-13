@@ -30,6 +30,22 @@ Provider credentials (only the ones for your selected providers are required):
 set, incoming requests must send `Authorization: Bearer <that value>` — this is the value you'd put in
 VetScribe's own "API Key" setting. If unset, the backend accepts unauthenticated requests.
 
+### Using a `.env` file
+
+Instead of exporting all of the above as real environment variables, copy `.env.example` to `.env` in
+`backend/` and fill in the values there:
+
+```bash
+cd backend
+cp .env.example .env
+# edit .env with your provider choice and API key(s)
+uv run python -m vetscribe_backend.main
+```
+
+`BackendConfig.from_env()` loads `.env` automatically (via `python-dotenv`) on startup. Real environment
+variables still take precedence over `.env` values if both are set. `.env` is gitignored — never commit
+it.
+
 The SOAP-note system prompt sent to whichever note-generation provider is selected lives in
 `src/vetscribe_backend/prompts.py` (`SOAP_SYSTEM_PROMPT`) — edit it there if you want to change the
 clinical instructions given to the model.
