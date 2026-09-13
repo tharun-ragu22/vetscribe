@@ -4,12 +4,12 @@ from vetscribe_backend.config import BackendConfig
 def test_from_env_loads_values_from_dotenv_file(monkeypatch, tmp_path):
     monkeypatch.delenv("VETSCRIBE_NOTE_PROVIDER", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    (tmp_path / ".env").write_text(
+    dotenv_path = tmp_path / ".env"
+    dotenv_path.write_text(
         "VETSCRIBE_NOTE_PROVIDER=anthropic\nANTHROPIC_API_KEY=sk-from-dotenv\n"
     )
-    monkeypatch.chdir(tmp_path)
 
-    config = BackendConfig.from_env()
+    config = BackendConfig.from_env(dotenv_path=dotenv_path)
 
     assert config.note_provider == "anthropic"
     assert config.anthropic_api_key == "sk-from-dotenv"
@@ -17,10 +17,18 @@ def test_from_env_loads_values_from_dotenv_file(monkeypatch, tmp_path):
 
 def test_from_env_prefers_real_env_var_over_dotenv_file(monkeypatch, tmp_path):
     monkeypatch.setenv("VETSCRIBE_NOTE_PROVIDER", "gemini")
-    (tmp_path / ".env").write_text("VETSCRIBE_NOTE_PROVIDER=anthropic\n")
-    monkeypatch.chdir(tmp_path)
+    dotenv_path = tmp_path / ".env"
+    dotenv_path.write_text("VETSCRIBE_NOTE_PROVIDER=anthropic\n")
 
-    config = BackendConfig.from_env()
+    config = BackendConfig.from_env(dotenv_path=dotenv_path)
+
+    assert config.note_provider == "gemini"
+
+
+def test_from_env_works_when_dotenv_file_does_not_exist(monkeypatch, tmp_path):
+    monkeypatch.setenv("VETSCRIBE_NOTE_PROVIDER", "gemini")
+
+    config = BackendConfig.from_env(dotenv_path=tmp_path / "nonexistent.env")
 
     assert config.note_provider == "gemini"
 

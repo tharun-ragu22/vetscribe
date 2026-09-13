@@ -1,7 +1,10 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
-from dotenv import find_dotenv, load_dotenv
+from dotenv import load_dotenv
+
+_DEFAULT_DOTENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 
 @dataclass
@@ -19,8 +22,8 @@ class BackendConfig:
     backend_api_key: str = ""
 
     @classmethod
-    def from_env(cls) -> "BackendConfig":
-        load_dotenv(find_dotenv(usecwd=True))
+    def from_env(cls, dotenv_path: Path | str | None = None) -> "BackendConfig":
+        load_dotenv(dotenv_path or _DEFAULT_DOTENV_PATH)
         return cls(
             transcription_provider=os.environ.get("VETSCRIBE_TRANSCRIPTION_PROVIDER", "openai"),
             note_provider=os.environ.get("VETSCRIBE_NOTE_PROVIDER", "openai"),
