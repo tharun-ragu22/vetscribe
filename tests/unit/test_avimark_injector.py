@@ -22,6 +22,19 @@ def test_is_avimark_foreground_returns_false_for_other_windows(mocker):
     assert injector.is_avimark_foreground() is False
 
 
+def test_is_avimark_foreground_uses_configured_title_marker(mocker):
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mock_win32gui.GetForegroundWindow.return_value = 12345
+    mock_win32gui.GetWindowText.return_value = "PracticeSoft - [Patient: Max]"
+
+    injector = AvimarkInjector(title_marker="PracticeSoft")
+
+    assert injector.is_avimark_foreground() is True
+
+    default_injector = AvimarkInjector()
+    assert default_injector.is_avimark_foreground() is False
+
+
 def test_copy_to_clipboard_opens_empties_sets_and_closes_clipboard(mocker):
     mock_win32clipboard = mocker.patch("vetscribe.avimark_injector.win32clipboard")
 

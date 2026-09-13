@@ -56,6 +56,52 @@ def test_generate_soap_note_raises_api_client_error_on_http_error_status():
 
 
 @respx.mock
+def test_generate_soap_note_sends_authorization_header_when_api_key_configured():
+    route = respx.post("https://vetscribe.example.com/api/soap").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "subjective": "sub",
+                "objective": "obj",
+                "assessment": "assess",
+                "plan": "plan",
+            },
+        )
+    )
+
+    client = ApiClient(
+        endpoint="https://vetscribe.example.com/api/soap",
+        timeout_seconds=30,
+        api_key="secret-token",
+    )
+    client.generate_soap_note(b"RIFF....")
+
+    request = route.calls.last.request
+    assert request.headers["Authorization"] == "Bearer secret-token"
+
+
+@respx.mock
+def test_generate_soap_note_omits_authorization_header_when_no_api_key():
+    route = respx.post("https://vetscribe.example.com/api/soap").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "subjective": "sub",
+                "objective": "obj",
+                "assessment": "assess",
+                "plan": "plan",
+            },
+        )
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=30)
+    client.generate_soap_note(b"RIFF....")
+
+    request = route.calls.last.request
+    assert "Authorization" not in request.headers
+
+
+@respx.mock
 def test_generate_soap_note_raises_api_client_error_on_malformed_json():
     respx.post("https://vetscribe.example.com/api/soap").mock(
         return_value=httpx.Response(200, json={"subjective": "only one field present"})

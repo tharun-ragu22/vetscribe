@@ -11,11 +11,14 @@ logger = logging.getLogger("vetscribe.avimark_injector")
 
 
 class AvimarkInjector:
+    def __init__(self, title_marker: str = AVIMARK_TITLE_MARKER):
+        self.title_marker = title_marker
+
     def is_avimark_foreground(self) -> bool:
         hwnd = win32gui.GetForegroundWindow()
         title = win32gui.GetWindowText(hwnd)
         logger.debug("foreground window title: %r", title)
-        return AVIMARK_TITLE_MARKER.lower() in title.lower()
+        return self.title_marker.lower() in title.lower()
 
     def copy_to_clipboard(self, text: str):
         win32clipboard.OpenClipboard()

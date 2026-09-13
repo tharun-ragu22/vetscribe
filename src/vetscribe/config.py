@@ -5,6 +5,9 @@ DEFAULT_CONFIG = {
     "api_endpoint": "https://localhost:8443/api/soap",
     "api_timeout_seconds": 30,
     "hotkey": "<ctrl>+<shift>+r",
+    "api_key": "",
+    "target_window_matcher": "AVImark",
+    "launch_on_startup": False,
 }
 
 
@@ -13,6 +16,9 @@ class Config:
     api_endpoint: str
     api_timeout_seconds: int
     hotkey: str
+    api_key: str = ""
+    target_window_matcher: str = "AVImark"
+    launch_on_startup: bool = False
 
     @classmethod
     def load(cls, path):

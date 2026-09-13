@@ -19,16 +19,21 @@ class SoapNote:
 
 
 class ApiClient:
-    def __init__(self, endpoint: str, timeout_seconds: float):
+    def __init__(self, endpoint: str, timeout_seconds: float, api_key: str = ""):
         self.endpoint = endpoint
         self.timeout_seconds = timeout_seconds
+        self.api_key = api_key
 
     def generate_soap_note(self, audio_bytes: bytes) -> SoapNote:
+        headers = {"Content-Type": "audio/wav"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
         try:
             response = httpx.post(
                 self.endpoint,
                 content=audio_bytes,
-                headers={"Content-Type": "audio/wav"},
+                headers=headers,
                 timeout=self.timeout_seconds,
             )
         except httpx.TimeoutException as exc:

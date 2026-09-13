@@ -12,6 +12,8 @@ def test_build_app_wires_pipeline_dependencies_from_config():
         api_endpoint="https://example.test/soap",
         api_timeout_seconds=15,
         hotkey="<ctrl>+<shift>+r",
+        api_key="secret-token",
+        target_window_matcher="PracticeSoft",
     )
     tk_root = MagicMock()
 
@@ -22,7 +24,9 @@ def test_build_app_wires_pipeline_dependencies_from_config():
     assert isinstance(pipeline.api_client, ApiClient)
     assert pipeline.api_client.endpoint == "https://example.test/soap"
     assert pipeline.api_client.timeout_seconds == 15
+    assert pipeline.api_client.api_key == "secret-token"
     assert isinstance(pipeline.injector, AvimarkInjector)
+    assert pipeline.injector.title_marker == "PracticeSoft"
     assert returned_root is tk_root
     tk_root.withdraw.assert_called_once()
 
@@ -92,3 +96,63 @@ def test_build_app_error_callback_shows_flyout_with_error_message(mocker):
     _, kwargs = mock_flyout_cls.call_args
     assert kwargs["master"] is tk_root
     assert kwargs["soap_text"] == "SOAP Generation Failed: backend unreachable."
+
+
+def test_open_settings_opens_settings_window_with_current_config(mocker):
+    mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    tray_app.open_settings()
+
+    mock_settings_cls.assert_called_once()
+    _, kwargs = mock_settings_cls.call_args
+    assert kwargs["master"] is tk_root
+    assert kwargs["config"] is config
+
+
+def test_saving_settings_persists_config_and_updates_live_components(mocker, tmp_path):
+    mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
+    mocker.patch("vetscribe.hotkey_listener.keyboard.GlobalHotKeys")
+    config_path = tmp_path / "config.json"
+    mocker.patch("vetscribe.main.CONFIG_PATH", config_path)
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+        api_key="old-key",
+        target_window_matcher="AVImark",
+    )
+    tk_root = MagicMock()
+
+    tray_app, hotkey_listener, _ = build_app(config=config, tk_root=tk_root)
+    hotkey_listener.start()
+    tray_app.open_settings()
+
+    _, kwargs = mock_settings_cls.call_args
+    apply_settings = kwargs["on_save"]
+
+    new_config = Config(
+        api_endpoint="https://new.example.test/soap",
+        api_timeout_seconds=45,
+        hotkey="<ctrl>+<alt>+v",
+        api_key="new-key",
+        target_window_matcher="PracticeSoft",
+    )
+    apply_settings(new_config)
+
+    pipeline = tray_app.pipeline
+    assert pipeline.api_client.endpoint == "https://new.example.test/soap"
+    assert pipeline.api_client.timeout_seconds == 45
+    assert pipeline.api_client.api_key == "new-key"
+    assert pipeline.injector.title_marker == "PracticeSoft"
+    assert hotkey_listener.hotkey == "<ctrl>+<alt>+v"
+
+    reloaded = Config.load(config_path)
+    assert reloaded.api_endpoint == "https://new.example.test/soap"
+    assert reloaded.hotkey == "<ctrl>+<alt>+v"
