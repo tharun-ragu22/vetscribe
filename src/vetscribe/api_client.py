@@ -1,6 +1,9 @@
+import logging
 from dataclasses import dataclass
 
 import httpx
+
+logger = logging.getLogger("vetscribe.api_client")
 
 
 class ApiClientError(Exception):
@@ -29,8 +32,10 @@ class ApiClient:
                 timeout=self.timeout_seconds,
             )
         except httpx.TimeoutException as exc:
+            logger.error("backend request timed out: %s", exc)
             raise ApiClientError(f"request timed out: {exc}") from exc
 
+        logger.info("backend responded with status %s", response.status_code)
         if response.status_code != 200:
             raise ApiClientError(f"backend returned {response.status_code}: {response.text}")
 

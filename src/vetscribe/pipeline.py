@@ -1,9 +1,12 @@
 import enum
+import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
 from vetscribe.api_client import ApiClientError
+
+logger = logging.getLogger("vetscribe.pipeline")
 
 
 class PipelineState(enum.Enum):
@@ -62,6 +65,7 @@ class Pipeline:
             soap_note = self.api_client.generate_soap_note(audio_bytes)
         except ApiClientError as exc:
             saved_path = self._save_failed_audio(audio_bytes)
+            logger.error("SOAP generation failed: %s (audio saved to %s)", exc, saved_path)
             self.on_error(
                 f"SOAP Generation Failed: {exc}. Raw audio saved locally to {saved_path}."
             )
@@ -70,8 +74,10 @@ class Pipeline:
 
         soap_text = format_soap_text(soap_note)
         self.last_soap_text = soap_text
+        logger.info("SOAP note generated successfully")
 
         injected = self.injector.inject(soap_text)
+        logger.info("AVImark injection %s", "succeeded" if injected else "failed, showing flyout")
         if not injected:
             self.on_flyout_needed(soap_text)
 

@@ -1,3 +1,5 @@
+import logging
+
 import win32api
 import win32clipboard
 import win32con
@@ -5,11 +7,14 @@ import win32gui
 
 AVIMARK_TITLE_MARKER = "AVImark"
 
+logger = logging.getLogger("vetscribe.avimark_injector")
+
 
 class AvimarkInjector:
     def is_avimark_foreground(self) -> bool:
         hwnd = win32gui.GetForegroundWindow()
         title = win32gui.GetWindowText(hwnd)
+        logger.debug("foreground window title: %r", title)
         return AVIMARK_TITLE_MARKER.lower() in title.lower()
 
     def copy_to_clipboard(self, text: str):
@@ -22,9 +27,11 @@ class AvimarkInjector:
 
     def inject(self, text: str) -> bool:
         if not self.is_avimark_foreground():
+            logger.warning("injection skipped: AVImark is not the foreground window")
             return False
         self.copy_to_clipboard(text)
         self._send_ctrl_v()
+        logger.info("SOAP note injected into AVImark")
         return True
 
     def _send_ctrl_v(self):

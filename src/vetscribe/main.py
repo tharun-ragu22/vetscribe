@@ -9,6 +9,7 @@ from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
 from vetscribe.flyout_ui import FlyoutWindow
 from vetscribe.hotkey_listener import HotkeyListener
+from vetscribe.logger import build_logger
 from vetscribe.pipeline import Pipeline
 from vetscribe.tray_app import TrayApp
 
@@ -60,6 +61,7 @@ def build_app(config=None, tk_root=None):
 
 
 def run():
+    build_logger()
     tray_app, hotkey_listener, _ = build_app()
     hotkey_listener.start()
     tray_app.icon.run()

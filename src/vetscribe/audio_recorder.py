@@ -1,6 +1,10 @@
+import logging
+
 import numpy as np
 import sounddevice as sd
 from scipy.io import wavfile
+
+logger = logging.getLogger("vetscribe.audio_recorder")
 
 
 class AudioRecorder:
@@ -27,11 +31,13 @@ class AudioRecorder:
         )
         self._stream.start()
         self._recording = True
+        logger.info("mic recording started (sample_rate=%s, channels=%s)", self.sample_rate, self.channels)
 
     def stop(self):
         self._stream.stop()
         self._stream.close()
         self._recording = False
+        logger.info("mic recording stopped (%d frame chunks captured)", len(self._frames))
 
     def save_wav(self, path):
         if self._frames:
