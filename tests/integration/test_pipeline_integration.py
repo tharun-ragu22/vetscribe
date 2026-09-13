@@ -47,3 +47,27 @@ def test_toggle_recording_from_recording_stops_and_injects_successfully():
     deps["injector"].inject.assert_called_once()
     deps["on_flyout_needed"].assert_not_called()
     assert pipeline.state == PipelineState.IDLE
+
+
+def test_toggle_recording_from_recording_calls_flyout_when_injection_fails():
+    soap_note = SoapNote(
+        subjective="sub", objective="obj", assessment="assess", plan="plan"
+    )
+    recorder = MagicMock(
+        save_wav=MagicMock(side_effect=lambda path: path.write_bytes(b"fake-wav"))
+    )
+    deps_overrides = dict(
+        recorder=recorder,
+        api_client=MagicMock(generate_soap_note=MagicMock(return_value=soap_note)),
+        injector=MagicMock(inject=MagicMock(return_value=False)),
+    )
+    pipeline, deps = make_pipeline(**deps_overrides)
+    pipeline.state = PipelineState.RECORDING
+
+    pipeline.toggle_recording()
+
+    deps["on_flyout_needed"].assert_called_once()
+    called_text = deps["on_flyout_needed"].call_args[0][0]
+    assert "SUBJECTIVE: sub" in called_text
+    assert "PLAN: plan" in called_text
+    assert pipeline.state == PipelineState.IDLE
