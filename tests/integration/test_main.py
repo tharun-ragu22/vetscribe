@@ -38,6 +38,7 @@ def test_build_app_wires_hotkey_listener_to_tray_app_trigger():
     tray_app, hotkey_listener, _ = build_app(config=config, tk_root=tk_root)
 
     assert hotkey_listener.on_trigger == tray_app.on_hotkey_triggered
+    assert tray_app.hotkey_listener is hotkey_listener
 
 
 def test_build_app_flyout_callback_creates_flyout_window_on_injection_failure(mocker):

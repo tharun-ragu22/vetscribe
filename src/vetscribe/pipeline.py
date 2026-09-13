@@ -25,6 +25,7 @@ class Pipeline:
         self.injector = injector
         self.on_flyout_needed = on_flyout_needed
         self.state = PipelineState.IDLE
+        self.last_soap_text = None
 
     def toggle_recording(self):
         if self.state == PipelineState.IDLE:
@@ -44,6 +45,7 @@ class Pipeline:
 
         soap_note = self.api_client.generate_soap_note(audio_bytes)
         soap_text = format_soap_text(soap_note)
+        self.last_soap_text = soap_text
 
         injected = self.injector.inject(soap_text)
         if not injected:
