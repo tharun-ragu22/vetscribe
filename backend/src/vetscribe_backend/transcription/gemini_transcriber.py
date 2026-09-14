@@ -5,6 +5,10 @@ import httpx
 ENDPOINT_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
+class TranscriptionError(Exception):
+    pass
+
+
 class GeminiTranscriber:
     def __init__(self, api_key: str, model: str, timeout_seconds: float = 60):
         self.api_key = api_key
@@ -30,4 +34,13 @@ class GeminiTranscriber:
         )
         response.raise_for_status()
         data = response.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        try:
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except (KeyError, IndexError) as exc:
+            block_reason = data.get("promptFeedback", {}).get("blockReason")
+            finish_reason = (data.get("candidates") or [{}])[0].get("finishReason")
+            raise TranscriptionError(
+                "Gemini returned no transcribable content "
+                f"(blockReason={block_reason}, finishReason={finish_reason}); "
+                "the audio may be empty, silent, or blocked"
+            ) from exc

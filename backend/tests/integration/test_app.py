@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from vetscribe_backend.app import create_app
 from vetscribe_backend.schemas import SoapNote
+from vetscribe_backend.transcription.gemini_transcriber import TranscriptionError
 
 
 class FakePipeline:
@@ -87,6 +88,16 @@ def test_create_soap_note_returns_502_when_upstream_returns_error_status(make_co
             response=httpx.Response(400, request=httpx.Request("POST", "https://example.com")),
         )
     )
+    app = create_app(config=make_config(), pipeline=pipeline)
+    client = TestClient(app)
+
+    response = client.post("/api/soap", content=b"RIFF....")
+
+    assert response.status_code == 502
+
+
+def test_create_soap_note_returns_502_when_transcription_yields_no_content(make_config):
+    pipeline = FakePipeline(error=TranscriptionError("Gemini returned no transcribable content"))
     app = create_app(config=make_config(), pipeline=pipeline)
     client = TestClient(app)
 

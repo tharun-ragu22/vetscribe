@@ -2,7 +2,10 @@ import httpx
 import pytest
 import respx
 
-from vetscribe_backend.transcription.gemini_transcriber import GeminiTranscriber
+from vetscribe_backend.transcription.gemini_transcriber import (
+    GeminiTranscriber,
+    TranscriptionError,
+)
 
 
 @respx.mock
@@ -38,3 +41,20 @@ def test_transcribe_raises_on_http_error():
 
     with pytest.raises(httpx.HTTPStatusError):
         transcriber.transcribe(b"RIFF....")
+
+
+@respx.mock
+def test_transcribe_raises_transcription_error_when_no_candidates_returned():
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={"candidates": [], "promptFeedback": {"blockReason": "SAFETY"}},
+        )
+    )
+
+    transcriber = GeminiTranscriber(api_key="key123", model="gemini-2.0-flash")
+
+    with pytest.raises(TranscriptionError, match="SAFETY"):
+        transcriber.transcribe(b"RIFF....fake-wav-bytes....")

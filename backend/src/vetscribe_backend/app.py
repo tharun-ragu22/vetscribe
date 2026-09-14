@@ -7,6 +7,7 @@ from vetscribe_backend.note_generation import get_note_generator
 from vetscribe_backend.note_generation.parsing import NoteParsingError
 from vetscribe_backend.pipeline import SoapPipeline
 from vetscribe_backend.transcription import get_transcriber
+from vetscribe_backend.transcription.gemini_transcriber import TranscriptionError
 
 
 def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | None = None) -> FastAPI:
@@ -35,7 +36,7 @@ def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | Non
             return JSONResponse({"error": f"upstream provider error: {exc}"}, status_code=502)
         except httpx.RequestError as exc:
             return JSONResponse({"error": f"upstream request failed: {exc}"}, status_code=502)
-        except NoteParsingError as exc:
+        except (NoteParsingError, TranscriptionError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=502)
 
         return JSONResponse(soap_note.to_dict())

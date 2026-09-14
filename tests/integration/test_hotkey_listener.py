@@ -82,6 +82,31 @@ def test_handle_trigger_invokes_on_trigger_callback():
     assert calls == ["triggered"]
 
 
+def test_handle_trigger_ignores_rapid_repeat_within_debounce_window(mocker):
+    calls = []
+    listener = HotkeyListener(on_trigger=lambda: calls.append("triggered"))
+    times = iter([100.0, 100.05, 100.1])
+    mocker.patch("vetscribe.hotkey_listener.time.monotonic", side_effect=lambda: next(times))
+
+    listener._handle_trigger()
+    listener._handle_trigger()
+    listener._handle_trigger()
+
+    assert calls == ["triggered"]
+
+
+def test_handle_trigger_allows_trigger_after_debounce_window_elapses(mocker):
+    calls = []
+    listener = HotkeyListener(on_trigger=lambda: calls.append("triggered"))
+    times = iter([100.0, 100.5])
+    mocker.patch("vetscribe.hotkey_listener.time.monotonic", side_effect=lambda: next(times))
+
+    listener._handle_trigger()
+    listener._handle_trigger()
+
+    assert calls == ["triggered", "triggered"]
+
+
 def test_handle_trigger_serializes_concurrent_calls_across_threads():
     max_concurrent = 0
     current_concurrent = 0
