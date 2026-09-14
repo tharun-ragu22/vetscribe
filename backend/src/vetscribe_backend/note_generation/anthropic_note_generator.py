@@ -1,11 +1,12 @@
 import httpx
 
+from vetscribe_backend.note_generation import NoteGenerator
 from vetscribe_backend.note_generation.parsing import parse_soap_json
 from vetscribe_backend.prompts import SOAP_SYSTEM_PROMPT
 from vetscribe_backend.schemas import SoapNote
 
 
-class AnthropicNoteGenerator:
+class AnthropicNoteGenerator(NoteGenerator):
     ENDPOINT = "https://api.anthropic.com/v1/messages"
     ANTHROPIC_VERSION = "2023-06-01"
 

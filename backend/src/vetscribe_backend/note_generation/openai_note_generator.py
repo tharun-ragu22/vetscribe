@@ -1,11 +1,12 @@
 import httpx
 
+from vetscribe_backend.note_generation import NoteGenerator
 from vetscribe_backend.note_generation.parsing import parse_soap_json
 from vetscribe_backend.prompts import SOAP_SYSTEM_PROMPT
 from vetscribe_backend.schemas import SoapNote
 
 
-class OpenAiNoteGenerator:
+class OpenAiNoteGenerator(NoteGenerator):
     ENDPOINT = "https://api.openai.com/v1/chat/completions"
 
     def __init__(self, api_key: str, model: str, timeout_seconds: float = 60):

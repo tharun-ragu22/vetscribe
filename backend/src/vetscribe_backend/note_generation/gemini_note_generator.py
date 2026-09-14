@@ -1,5 +1,6 @@
 import httpx
 
+from vetscribe_backend.note_generation import NoteGenerator
 from vetscribe_backend.note_generation.parsing import parse_soap_json
 from vetscribe_backend.prompts import SOAP_SYSTEM_PROMPT
 from vetscribe_backend.schemas import SoapNote
@@ -7,7 +8,7 @@ from vetscribe_backend.schemas import SoapNote
 ENDPOINT_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
-class GeminiNoteGenerator:
+class GeminiNoteGenerator(NoteGenerator):
     def __init__(self, api_key: str, model: str, timeout_seconds: float = 60):
         self.api_key = api_key
         self.model = model
