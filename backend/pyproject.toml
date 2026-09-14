@@ -12,6 +12,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pydantic-ai-slim[openai]>=2.43.0",
+    "pydantic-evals>=2.43.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "respx>=0.21.0",

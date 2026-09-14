@@ -19,6 +19,8 @@ class BackendConfig:
     anthropic_note_model: str = "claude-sonnet-4-5"
     gemini_transcription_model: str = "gemini-2.5-flash"
     gemini_note_model: str = "gemini-2.5-flash"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_note_model: str = "gemma4:e4b"
     backend_api_key: str = ""
 
     @classmethod
@@ -37,5 +39,7 @@ class BackendConfig:
                 "GEMINI_TRANSCRIPTION_MODEL", "gemini-2.5-flash"
             ),
             gemini_note_model=os.environ.get("GEMINI_NOTE_MODEL", "gemini-2.5-flash"),
+            ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+            ollama_note_model=os.environ.get("OLLAMA_NOTE_MODEL", "gemma4:e4b"),
             backend_api_key=os.environ.get("VETSCRIBE_BACKEND_API_KEY", ""),
         )

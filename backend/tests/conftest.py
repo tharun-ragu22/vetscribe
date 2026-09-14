@@ -17,6 +17,8 @@ def make_config():
             anthropic_note_model="claude-sonnet-4-5",
             gemini_transcription_model="gemini-2.0-flash",
             gemini_note_model="gemini-2.0-flash",
+            ollama_base_url="http://localhost:11434",
+            ollama_note_model="gemma4:e4b",
             backend_api_key="",
         )
         base.update(overrides)

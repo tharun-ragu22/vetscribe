@@ -56,8 +56,46 @@ jobs:
         working-directory: backend
         run: uv run pytest -v
 
+  backend-evals:
+    needs: test-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Sync dependencies
+        working-directory: backend
+        run: uv sync --locked
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama server
+        run: |
+          ollama serve &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:11434 >/dev/null && exit 0
+            sleep 1
+          done
+          echo "ollama server did not come up in time" >&2
+          exit 1
+
+      - name: Pull gemma4:e4b
+        run: ollama pull gemma4:e4b
+
+      - name: Run note generator evals
+        working-directory: backend
+        env:
+          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_NOTE_MODEL: gemma4:e4b
+        run: uv run python -m evals.note_generator_evals
+
   build-windows-exe:
-    needs: test
+    needs: [test, backend-evals]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7

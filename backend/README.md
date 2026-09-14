@@ -11,7 +11,7 @@ you can mix providers (e.g. Gemini for transcription, Anthropic for note generat
 | Env var | Values | Default |
 |---|---|---|
 | `VETSCRIBE_TRANSCRIPTION_PROVIDER` | `openai`, `gemini` | `openai` |
-| `VETSCRIBE_NOTE_PROVIDER` | `openai`, `anthropic`, `gemini` | `openai` |
+| `VETSCRIBE_NOTE_PROVIDER` | `openai`, `anthropic`, `gemini`, `ollama` | `openai` |
 
 Provider credentials (only the ones for your selected providers are required):
 
@@ -25,6 +25,8 @@ Provider credentials (only the ones for your selected providers are required):
 | `ANTHROPIC_NOTE_MODEL` | default `claude-sonnet-4-5` |
 | `GEMINI_TRANSCRIPTION_MODEL` | default `gemini-2.5-flash` |
 | `GEMINI_NOTE_MODEL` | default `gemini-2.5-flash` |
+| `OLLAMA_BASE_URL` | self-hosted Ollama server, default `http://localhost:11434` (no API key needed) |
+| `OLLAMA_NOTE_MODEL` | default `gemma4:e4b` |
 
 `VETSCRIBE_BACKEND_API_KEY` is a separate shared secret (distinct from the provider keys above): if
 set, incoming requests must send `Authorization: Bearer <that value>` — this is the value you'd put in
@@ -74,3 +76,33 @@ uv run pytest -v
 
 All provider HTTP calls are mocked with `respx` in tests — no real API keys or network calls are
 needed to run the suite.
+
+## Evals
+
+`evals/` (separate from `tests/`, not picked up by `pytest`) holds `pydantic-evals`-based evals for
+`NoteGenerator.generate()` against a range of example transcripts (`evals/cases.py`) — routine visits,
+emergencies, multi-pet visits, vague/garbled transcripts, declined-care conversations, and irrelevant
+chit-chat mixed in with a real complaint. Unlike the unit tests, these make real network calls to a live
+Ollama-compatible server, scoring output with deterministic checks (all four SOAP fields present,
+expected keywords per case) plus an `LLMJudge` rubric for faithfulness/hallucination, correct SOAP
+categorization, and ignoring irrelevant chatter — judged by the same Ollama model, so no paid API key is
+needed:
+
+```bash
+cd backend
+OLLAMA_BASE_URL=http://localhost:11434 OLLAMA_NOTE_MODEL=gemma4:e4b \
+  uv run python -m evals.note_generator_evals
+```
+
+Point `OLLAMA_BASE_URL` at any reachable Ollama server (e.g. a tunnel to a GPU box) and
+`OLLAMA_NOTE_MODEL` at whatever's pulled there. Both default to `BackendConfig`'s own Ollama defaults
+(`http://localhost:11434` / `gemma4:e4b`) if unset. A case counts as passing only if it didn't error
+and every assertion (`HasAllSoapFields`, `LLMJudge`) is true; `note_generator_evals.main()` exits
+non-zero unless at least `REQUIRED_PASS_RATE` (70%) of cases pass, so it works as a CI gate without
+requiring a perfect run from a small local model.
+
+`.github/workflows/ci.yml`'s `backend-evals` job runs this in CI on `ubuntu-latest`, after
+`test-backend`'s deterministic suite passes and before `build-windows-exe`: it installs Ollama, pulls
+`gemma4:e4b`, and runs the same command against `localhost:11434`. Since these are CPU-only GitHub-hosted
+runners (no GPU), an 8B model doing ~20 generations (10 cases × generation + judge) is meaningfully
+slower than a local GPU run — expect several minutes, not seconds.
