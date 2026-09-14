@@ -1,5 +1,6 @@
 import httpx
 
+from vetscribe_backend.config import BackendConfig
 from vetscribe_backend.note_generation import NoteGenerator
 from vetscribe_backend.note_generation.parsing import parse_soap_json
 from vetscribe_backend.prompts import SOAP_SYSTEM_PROMPT
@@ -7,6 +8,7 @@ from vetscribe_backend.schemas import SoapNote
 
 
 class AnthropicNoteGenerator(NoteGenerator):
+    provider_name = "anthropic"
     ENDPOINT = "https://api.anthropic.com/v1/messages"
     ANTHROPIC_VERSION = "2023-06-01"
 
@@ -14,6 +16,10 @@ class AnthropicNoteGenerator(NoteGenerator):
         self.api_key = api_key
         self.model = model
         self.timeout_seconds = timeout_seconds
+
+    @classmethod
+    def from_config(cls, config: BackendConfig) -> "AnthropicNoteGenerator":
+        return cls(api_key=config.anthropic_api_key, model=config.anthropic_note_model)
 
     def generate(self, transcript: str) -> SoapNote:
         response = httpx.post(
