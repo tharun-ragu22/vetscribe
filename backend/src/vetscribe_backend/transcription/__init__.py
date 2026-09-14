@@ -1,9 +1,24 @@
+import importlib
+import pkgutil
 from abc import ABC, abstractmethod
 
 from vetscribe_backend.config import BackendConfig
 
+_registry: dict[str, type["Transcriber"]] = {}
+
 
 class Transcriber(ABC):
+    provider_name: str
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if getattr(cls, "provider_name", None):
+            _registry[cls.provider_name] = cls
+
+    @classmethod
+    @abstractmethod
+    def from_config(cls, config: BackendConfig) -> "Transcriber": ...
+
     @abstractmethod
     def transcribe(self, audio_bytes: bytes) -> str: ...
 
@@ -12,16 +27,17 @@ class UnknownProviderError(Exception):
     pass
 
 
-def get_transcriber(config: BackendConfig) -> Transcriber:
-    from vetscribe_backend.transcription.gemini_transcriber import GeminiTranscriber
-    from vetscribe_backend.transcription.openai_transcriber import OpenAiTranscriber
+def _discover_providers() -> None:
+    for module_info in pkgutil.iter_modules(__path__):
+        importlib.import_module(f"{__name__}.{module_info.name}")
 
-    if config.transcription_provider == "openai":
-        return OpenAiTranscriber(
-            api_key=config.openai_api_key, model=config.openai_transcription_model
-        )
-    if config.transcription_provider == "gemini":
-        return GeminiTranscriber(
-            api_key=config.gemini_api_key, model=config.gemini_transcription_model
-        )
-    raise UnknownProviderError(f"unknown transcription provider: {config.transcription_provider}")
+
+def get_transcriber(config: BackendConfig) -> Transcriber:
+    _discover_providers()
+    try:
+        transcriber_cls = _registry[config.transcription_provider]
+    except KeyError:
+        raise UnknownProviderError(
+            f"unknown transcription provider: {config.transcription_provider}"
+        ) from None
+    return transcriber_cls.from_config(config)

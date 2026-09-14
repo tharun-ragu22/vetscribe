@@ -1,13 +1,21 @@
 import httpx
 
+from vetscribe_backend.config import BackendConfig
+from vetscribe_backend.transcription import Transcriber
 
-class OpenAiTranscriber:
+
+class OpenAiTranscriber(Transcriber):
+    provider_name = "openai"
     ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
 
     def __init__(self, api_key: str, model: str, timeout_seconds: float = 60):
         self.api_key = api_key
         self.model = model
         self.timeout_seconds = timeout_seconds
+
+    @classmethod
+    def from_config(cls, config: BackendConfig) -> "OpenAiTranscriber":
+        return cls(api_key=config.openai_api_key, model=config.openai_transcription_model)
 
     def transcribe(self, audio_bytes: bytes) -> str:
         response = httpx.post(

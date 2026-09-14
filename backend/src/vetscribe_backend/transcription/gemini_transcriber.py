@@ -2,6 +2,9 @@ import base64
 
 import httpx
 
+from vetscribe_backend.config import BackendConfig
+from vetscribe_backend.transcription import Transcriber
+
 ENDPOINT_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
@@ -9,11 +12,17 @@ class TranscriptionError(Exception):
     pass
 
 
-class GeminiTranscriber:
+class GeminiTranscriber(Transcriber):
+    provider_name = "gemini"
+
     def __init__(self, api_key: str, model: str, timeout_seconds: float = 60):
         self.api_key = api_key
         self.model = model
         self.timeout_seconds = timeout_seconds
+
+    @classmethod
+    def from_config(cls, config: BackendConfig) -> "GeminiTranscriber":
+        return cls(api_key=config.gemini_api_key, model=config.gemini_transcription_model)
 
     def transcribe(self, audio_bytes: bytes) -> str:
         audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
