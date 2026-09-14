@@ -104,5 +104,6 @@ requiring a perfect run from a small local model.
 `.github/workflows/ci.yml`'s `backend-evals` job runs this in CI on `ubuntu-latest`, after
 `test-backend`'s deterministic suite passes and before `build-windows-exe`: it installs Ollama, pulls
 `gemma4:e4b`, and runs the same command against `localhost:11434`. Since these are CPU-only GitHub-hosted
-runners (no GPU), an 8B model doing ~20 generations (10 cases × generation + judge) is meaningfully
-slower than a local GPU run — expect several minutes, not seconds.
+runners (no GPU), and Ollama serializes generation per model anyway, the eval runner processes cases one
+at a time with a generous `OLLAMA_EVAL_TIMEOUT_SECONDS` (default 300s) rather than the provider's normal
+120s default — expect the CI job to take tens of minutes, not seconds.

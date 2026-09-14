@@ -10,10 +10,11 @@ up, so it isn't picked up by `pytest` (testpaths=["tests"]); it's instead run as
 
 Falls back to http://localhost:11434 / gemma4:e4b (BackendConfig's own defaults) if the env
 vars aren't set. The same model doubles as the LLMJudge evaluator, so the whole run needs
-no paid API keys. A case counts as passing only if it didn't error and every assertion
-(HasAllSoapFields, LLMJudge) is true; exits non-zero unless at least REQUIRED_PASS_RATE of
-cases pass, tolerating some flakiness from a small local model rather than requiring a
-perfect run.
+no paid API keys. Cases run one at a time (Ollama serializes generation per model anyway)
+with a generous OLLAMA_EVAL_TIMEOUT_SECONDS (default 300s) to cover slow CPU-only inference.
+A case counts as passing only if it didn't error and every assertion (HasAllSoapFields,
+LLMJudge) is true; exits non-zero unless at least REQUIRED_PASS_RATE of cases pass,
+tolerating some flakiness from a small local model rather than requiring a perfect run.
 """
 
 import asyncio
@@ -32,6 +33,11 @@ from vetscribe_backend.schemas import SoapNote
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_NOTE_MODEL = os.environ.get("OLLAMA_NOTE_MODEL", "gemma4:e4b")
+
+# Ollama serializes generation per model by default (one request at a time), so a request
+# queued behind another isn't actually slow, it's just waiting — this needs to be generous
+# enough to cover CPU-only inference (e.g. CI runners with no GPU), not just genuine latency.
+OLLAMA_EVAL_TIMEOUT_SECONDS = float(os.environ.get("OLLAMA_EVAL_TIMEOUT_SECONDS", "300"))
 
 REQUIRED_PASS_RATE = 0.7
 
@@ -65,13 +71,18 @@ def build_dataset() -> Dataset[str, SoapNote, dict]:
 
 
 async def generate_note(transcript: str) -> SoapNote:
-    generator = OllamaNoteGenerator(base_url=OLLAMA_BASE_URL, model=OLLAMA_NOTE_MODEL)
+    generator = OllamaNoteGenerator(
+        base_url=OLLAMA_BASE_URL, model=OLLAMA_NOTE_MODEL, timeout_seconds=OLLAMA_EVAL_TIMEOUT_SECONDS
+    )
     return await asyncio.to_thread(generator.generate, transcript)
 
 
 def main() -> None:
     dataset = build_dataset()
-    report = dataset.evaluate_sync(generate_note, max_concurrency=3)
+    # max_concurrency=1: Ollama serializes generation per model server-side, so running
+    # cases "concurrently" just queues them behind each other and burns each queued
+    # request's client-side timeout while it waits, not while it's actually generating.
+    report = dataset.evaluate_sync(generate_note, max_concurrency=1)
     report.print(include_input=False, include_output=True, include_durations=True)
 
     total_cases = len(report.cases) + len(report.failures)
