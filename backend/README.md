@@ -23,8 +23,8 @@ Provider credentials (only the ones for your selected providers are required):
 | `OPENAI_TRANSCRIPTION_MODEL` | default `whisper-1` |
 | `OPENAI_NOTE_MODEL` | default `gpt-4o-mini` |
 | `ANTHROPIC_NOTE_MODEL` | default `claude-sonnet-4-5` |
-| `GEMINI_TRANSCRIPTION_MODEL` | default `gemini-2.0-flash` |
-| `GEMINI_NOTE_MODEL` | default `gemini-2.0-flash` |
+| `GEMINI_TRANSCRIPTION_MODEL` | default `gemini-2.5-flash` |
+| `GEMINI_NOTE_MODEL` | default `gemini-2.5-flash` |
 
 `VETSCRIBE_BACKEND_API_KEY` is a separate shared secret (distinct from the provider keys above): if
 set, incoming requests must send `Authorization: Bearer <that value>` — this is the value you'd put in

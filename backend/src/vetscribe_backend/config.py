@@ -17,8 +17,8 @@ class BackendConfig:
     openai_transcription_model: str = "whisper-1"
     openai_note_model: str = "gpt-4o-mini"
     anthropic_note_model: str = "claude-sonnet-4-5"
-    gemini_transcription_model: str = "gemini-2.0-flash"
-    gemini_note_model: str = "gemini-2.0-flash"
+    gemini_transcription_model: str = "gemini-2.5-flash"
+    gemini_note_model: str = "gemini-2.5-flash"
     backend_api_key: str = ""
 
     @classmethod
@@ -34,8 +34,8 @@ class BackendConfig:
             openai_note_model=os.environ.get("OPENAI_NOTE_MODEL", "gpt-4o-mini"),
             anthropic_note_model=os.environ.get("ANTHROPIC_NOTE_MODEL", "claude-sonnet-4-5"),
             gemini_transcription_model=os.environ.get(
-                "GEMINI_TRANSCRIPTION_MODEL", "gemini-2.0-flash"
+                "GEMINI_TRANSCRIPTION_MODEL", "gemini-2.5-flash"
             ),
-            gemini_note_model=os.environ.get("GEMINI_NOTE_MODEL", "gemini-2.0-flash"),
+            gemini_note_model=os.environ.get("GEMINI_NOTE_MODEL", "gemini-2.5-flash"),
             backend_api_key=os.environ.get("VETSCRIBE_BACKEND_API_KEY", ""),
         )
