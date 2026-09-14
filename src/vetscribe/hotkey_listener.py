@@ -1,19 +1,11 @@
 import logging
 import threading
-import time
 
 from pynput import keyboard
 
 logger = logging.getLogger("vetscribe.hotkey_listener")
 
 HOTKEY = "<ctrl>+<shift>+r"
-
-# GlobalHotKeys re-fires its callback on every OS key-repeat event while the
-# combo is held down, not just once per physical press. Without this, holding
-# the hotkey for even a fraction of a second causes several rapid
-# start/stop toggles against a single key press, sending near-empty audio to
-# the backend. Debounce so repeats within this window are ignored.
-DEBOUNCE_SECONDS = 0.3
 
 
 class HotkeyListener:
@@ -22,10 +14,15 @@ class HotkeyListener:
         self.hotkey = hotkey
         self._lock = threading.Lock()
         self._listener = None
-        self._last_trigger_time = None
+        self._required_keys = frozenset()
+        self._pressed = set()
+        self._active = False
 
     def start(self):
-        self._listener = keyboard.GlobalHotKeys({self.hotkey: self._handle_trigger})
+        self._required_keys = frozenset(keyboard.HotKey.parse(self.hotkey))
+        self._pressed = set()
+        self._active = False
+        self._listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
         self._listener.start()
         logger.info("listening for hotkey %s", self.hotkey)
 
@@ -40,15 +37,29 @@ class HotkeyListener:
             self.stop()
             self.start()
 
+    def _on_press(self, key):
+        canonical_key = self._listener.canonical(key)
+        with self._lock:
+            self._pressed.add(canonical_key)
+            # Only fire on the edge where the combo newly becomes fully held.
+            # OS key-repeat re-sends press events for keys already held down,
+            # which would otherwise cause extra triggers (and extra
+            # start/stop toggles) for a single physical press. Requiring a
+            # full release of the combo (see _on_release) before allowing
+            # another trigger makes this immune to repeat timing entirely.
+            if self._active or not (self._required_keys <= self._pressed):
+                return
+            self._active = True
+        self._handle_trigger()
+
+    def _on_release(self, key):
+        canonical_key = self._listener.canonical(key)
+        with self._lock:
+            self._pressed.discard(canonical_key)
+            if not (self._required_keys <= self._pressed):
+                self._active = False
+
     def _handle_trigger(self):
         with self._lock:
-            now = time.monotonic()
-            if (
-                self._last_trigger_time is not None
-                and now - self._last_trigger_time < DEBOUNCE_SECONDS
-            ):
-                logger.debug("hotkey %s trigger ignored (debounced)", self.hotkey)
-                return
-            self._last_trigger_time = now
             logger.info("hotkey %s triggered", self.hotkey)
             self.on_trigger()

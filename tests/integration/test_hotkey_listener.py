@@ -1,76 +1,129 @@
 import threading
 import time
+from types import SimpleNamespace
+
+from pynput import keyboard
 
 from vetscribe.hotkey_listener import HotkeyListener
 
 
-def test_start_registers_ctrl_shift_r_hotkey_and_starts_listener(mocker):
-    mock_global_hotkeys_cls = mocker.patch(
-        "vetscribe.hotkey_listener.keyboard.GlobalHotKeys"
-    )
-    mock_listener = mock_global_hotkeys_cls.return_value
+def test_start_parses_ctrl_shift_r_hotkey_and_starts_listener(mocker):
+    mock_listener_cls = mocker.patch("vetscribe.hotkey_listener.keyboard.Listener")
+    mock_listener = mock_listener_cls.return_value
 
     listener = HotkeyListener(on_trigger=lambda: None)
     listener.start()
 
-    args, kwargs = mock_global_hotkeys_cls.call_args
-    hotkey_map = args[0] if args else kwargs["hotkey_map"]
-    assert "<ctrl>+<shift>+r" in hotkey_map
+    assert listener._required_keys == frozenset(keyboard.HotKey.parse("<ctrl>+<shift>+r"))
+    _, kwargs = mock_listener_cls.call_args
+    assert kwargs["on_press"] == listener._on_press
+    assert kwargs["on_release"] == listener._on_release
     mock_listener.start.assert_called_once()
 
 
 def test_start_uses_custom_hotkey_passed_at_construction(mocker):
-    mock_global_hotkeys_cls = mocker.patch(
-        "vetscribe.hotkey_listener.keyboard.GlobalHotKeys"
-    )
+    mocker.patch("vetscribe.hotkey_listener.keyboard.Listener")
 
     listener = HotkeyListener(on_trigger=lambda: None, hotkey="<ctrl>+<alt>+v")
     listener.start()
 
-    args, kwargs = mock_global_hotkeys_cls.call_args
-    hotkey_map = args[0] if args else kwargs["hotkey_map"]
-    assert "<ctrl>+<alt>+v" in hotkey_map
-    assert "<ctrl>+<shift>+r" not in hotkey_map
+    assert listener._required_keys == frozenset(keyboard.HotKey.parse("<ctrl>+<alt>+v"))
 
 
 def test_update_hotkey_while_running_stops_old_listener_and_starts_new_binding(mocker):
-    mock_global_hotkeys_cls = mocker.patch(
-        "vetscribe.hotkey_listener.keyboard.GlobalHotKeys"
-    )
-    first_listener = mock_global_hotkeys_cls.return_value
+    mock_listener_cls = mocker.patch("vetscribe.hotkey_listener.keyboard.Listener")
+    first_listener = mock_listener_cls.return_value
 
     listener = HotkeyListener(on_trigger=lambda: None)
     listener.start()
 
     second_listener = mocker.Mock()
-    mock_global_hotkeys_cls.return_value = second_listener
+    mock_listener_cls.return_value = second_listener
 
     listener.update_hotkey("<ctrl>+<alt>+v")
 
     first_listener.stop.assert_called_once()
-    args, kwargs = mock_global_hotkeys_cls.call_args
-    hotkey_map = args[0] if args else kwargs["hotkey_map"]
-    assert "<ctrl>+<alt>+v" in hotkey_map
     second_listener.start.assert_called_once()
     assert listener.hotkey == "<ctrl>+<alt>+v"
+    assert listener._required_keys == frozenset(keyboard.HotKey.parse("<ctrl>+<alt>+v"))
 
 
 def test_update_hotkey_when_not_started_only_updates_pending_hotkey(mocker):
-    mock_global_hotkeys_cls = mocker.patch(
-        "vetscribe.hotkey_listener.keyboard.GlobalHotKeys"
-    )
+    mock_listener_cls = mocker.patch("vetscribe.hotkey_listener.keyboard.Listener")
 
     listener = HotkeyListener(on_trigger=lambda: None)
     listener.update_hotkey("<ctrl>+<alt>+v")
 
-    mock_global_hotkeys_cls.assert_not_called()
+    mock_listener_cls.assert_not_called()
     assert listener.hotkey == "<ctrl>+<alt>+v"
 
     listener.start()
 
-    args, kwargs = mock_global_hotkeys_cls.call_args
-    hotkey_map = args[0] if args else kwargs["hotkey_map"]
-    assert "<ctrl>+<alt>+v" in hotkey_map
+    assert listener._required_keys == frozenset(keyboard.HotKey.parse("<ctrl>+<alt>+v"))
+
+
+def _make_listener(on_trigger, hotkey="<ctrl>+<shift>+r"):
+    listener = HotkeyListener(on_trigger=on_trigger, hotkey=hotkey)
+    listener._required_keys = frozenset(keyboard.HotKey.parse(hotkey))
+    listener._pressed = set()
+    listener._active = False
+    # Identity canonicalization is enough here: the guard logic being tested
+    # only cares about set membership, not pynput's real key normalization.
+    listener._listener = SimpleNamespace(canonical=lambda key: key)
+    return listener
+
+
+def _press_combo(listener):
+    for key in keyboard.HotKey.parse(listener.hotkey):
+        listener._on_press(key)
+
+
+def test_pressing_full_combo_triggers_once():
+    calls = []
+    listener = _make_listener(on_trigger=lambda: calls.append("triggered"))
+
+    _press_combo(listener)
+
+    assert calls == ["triggered"]
+
+
+def test_os_key_repeat_while_held_does_not_retrigger():
+    calls = []
+    listener = _make_listener(on_trigger=lambda: calls.append("triggered"))
+    keys = list(keyboard.HotKey.parse(listener.hotkey))
+
+    _press_combo(listener)
+    # Simulate the OS re-sending press events for the still-held keys, as
+    # happens with key-repeat when a combo is held for more than an instant.
+    for _ in range(5):
+        for key in keys:
+            listener._on_press(key)
+
+    assert calls == ["triggered"]
+
+
+def test_releasing_and_repressing_combo_triggers_again():
+    calls = []
+    listener = _make_listener(on_trigger=lambda: calls.append("triggered"))
+    keys = list(keyboard.HotKey.parse(listener.hotkey))
+
+    _press_combo(listener)
+    for key in keys:
+        listener._on_release(key)
+    _press_combo(listener)
+
+    assert calls == ["triggered", "triggered"]
+
+
+def test_partial_combo_does_not_trigger():
+    calls = []
+    listener = _make_listener(on_trigger=lambda: calls.append("triggered"))
+    keys = list(keyboard.HotKey.parse(listener.hotkey))
+
+    for key in keys[:-1]:
+        listener._on_press(key)
+
+    assert calls == []
 
 
 def test_handle_trigger_invokes_on_trigger_callback():
@@ -80,31 +133,6 @@ def test_handle_trigger_invokes_on_trigger_callback():
     listener._handle_trigger()
 
     assert calls == ["triggered"]
-
-
-def test_handle_trigger_ignores_rapid_repeat_within_debounce_window(mocker):
-    calls = []
-    listener = HotkeyListener(on_trigger=lambda: calls.append("triggered"))
-    times = iter([100.0, 100.05, 100.1])
-    mocker.patch("vetscribe.hotkey_listener.time.monotonic", side_effect=lambda: next(times))
-
-    listener._handle_trigger()
-    listener._handle_trigger()
-    listener._handle_trigger()
-
-    assert calls == ["triggered"]
-
-
-def test_handle_trigger_allows_trigger_after_debounce_window_elapses(mocker):
-    calls = []
-    listener = HotkeyListener(on_trigger=lambda: calls.append("triggered"))
-    times = iter([100.0, 100.5])
-    mocker.patch("vetscribe.hotkey_listener.time.monotonic", side_effect=lambda: next(times))
-
-    listener._handle_trigger()
-    listener._handle_trigger()
-
-    assert calls == ["triggered", "triggered"]
 
 
 def test_handle_trigger_serializes_concurrent_calls_across_threads():

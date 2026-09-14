@@ -120,7 +120,7 @@ def test_open_settings_opens_settings_window_with_current_config(mocker):
 def test_saving_settings_persists_config_and_updates_live_components(mocker, tmp_path):
     mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
     mocker.patch("vetscribe.main.autostart")
-    mocker.patch("vetscribe.hotkey_listener.keyboard.GlobalHotKeys")
+    mocker.patch("vetscribe.hotkey_listener.keyboard.Listener")
     config_path = tmp_path / "config.json"
     mocker.patch("vetscribe.main.CONFIG_PATH", config_path)
     config = Config(
@@ -164,7 +164,7 @@ def test_saving_settings_enables_autostart_when_launch_on_startup_checked(mocker
     mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
     mock_enable = mocker.patch("vetscribe.main.autostart.enable")
     mock_disable = mocker.patch("vetscribe.main.autostart.disable")
-    mocker.patch("vetscribe.hotkey_listener.keyboard.GlobalHotKeys")
+    mocker.patch("vetscribe.hotkey_listener.keyboard.Listener")
     mocker.patch("vetscribe.main.CONFIG_PATH", tmp_path / "config.json")
     config = Config(
         api_endpoint="https://example.test/soap",
