@@ -7,6 +7,19 @@ on:
     branches: [main]
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+
   test:
     strategy:
       fail-fast: false
@@ -83,7 +96,8 @@ jobs:
         run: uv run pytest -v
 
   backend-evals:
-    needs: test-backend
+    needs: [test-backend, changes]
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -123,6 +137,11 @@ jobs:
 
   build-windows-exe:
     needs: [test, backend-evals]
+    # backend-evals is skipped entirely when backend/ didn't change (see the
+    # `changes` job); a skipped dependency fails the implicit success() check
+    # that gates downstream jobs by default, so this must be spelled out
+    # explicitly rather than left to the default `if`.
+    if: always() && needs.test.result == 'success' && (needs.backend-evals.result == 'success' || needs.backend-evals.result == 'skipped')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7

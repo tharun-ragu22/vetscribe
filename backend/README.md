@@ -107,3 +107,8 @@ requiring a perfect run from a small local model.
 runners (no GPU), and Ollama serializes generation per model anyway, the eval runner processes cases one
 at a time with a generous `OLLAMA_EVAL_TIMEOUT_SECONDS` (default 300s) rather than the provider's normal
 120s default — expect the CI job to take tens of minutes, not seconds.
+
+The job only runs when a push/PR actually touches `backend/**` (gated by the `changes` job at the top of
+the workflow, via `dorny/paths-filter`) — it's skipped entirely for tray-app-only changes, since it's the
+slowest job in the pipeline and gains nothing from re-running against an unchanged backend.
+`build-windows-exe` accounts for this by treating `backend-evals` being skipped the same as it succeeding.
