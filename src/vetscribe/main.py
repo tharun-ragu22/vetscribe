@@ -80,7 +80,12 @@ def build_app(config=None, tk_root=None):
         offline_queue=offline_queue,
     )
 
-    tray_app = TrayApp(pipeline=pipeline)
+    tray_app = TrayApp(
+        pipeline=pipeline,
+        on_show_note=lambda soap_text: run_on_main_thread(
+            tk_root, lambda: show_flyout(tk_root, injector, soap_text)
+        ),
+    )
     tray_app.attach_offline_queue(offline_queue)
     tray_app.attach_tk_root(tk_root)
     hotkey_listener = HotkeyListener(

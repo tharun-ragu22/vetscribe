@@ -99,6 +99,26 @@ def test_build_app_error_callback_shows_flyout_with_error_message(mocker):
     assert kwargs["soap_text"] == "SOAP Generation Failed: backend unreachable."
 
 
+def test_open_last_note_shows_flyout_with_last_soap_text(mocker):
+    mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    tray_app.pipeline.last_soap_text = "SUBJECTIVE: last note"
+
+    tray_app.open_last_note()
+
+    mock_flyout_cls.assert_called_once()
+    _, kwargs = mock_flyout_cls.call_args
+    assert kwargs["master"] is tk_root
+    assert kwargs["soap_text"] == "SUBJECTIVE: last note"
+
+
 def test_open_settings_opens_settings_window_with_current_config(mocker):
     mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
     config = Config(
