@@ -34,6 +34,32 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run -a uv run pytest -v
 
+      # Works around a known upstream bug (actions/setup-python#1102,
+      # astral-sh/python-build-standalone#939): tkinter randomly fails with
+      # "Can't find a usable init.tcl" on Windows when running inside a venv
+      # (sys.prefix != sys.base_prefix) with a non-interactive stdin, which is
+      # always true for a non-TTY GitHub Actions step. In that combination, Tk's
+      # console-window init spawns a second Tcl interpreter that doesn't inherit
+      # the tcl_library value Python computed, so it can't find its own install.
+      # Setting TCL_LIBRARY/TK_LIBRARY explicitly sidesteps this — the same
+      # workaround the CPython/python-build-standalone maintainers point to,
+      # pending an upstream fix. Derived from sys.base_prefix (the interpreter
+      # actually backing .venv) rather than hardcoded, so it tracks whichever
+      # Python version/tcl release the runner image ships.
+      - name: Set Tcl/Tk library paths (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          uv run python - <<'PY' >> "$GITHUB_ENV"
+          import sys
+          from pathlib import Path
+          tcl_dir = Path(sys.base_prefix) / "tcl"
+          tcl_lib = next(tcl_dir.glob("tcl8*"))
+          tk_lib = next(tcl_dir.glob("tk8*"))
+          print(f"TCL_LIBRARY={tcl_lib.as_posix()}")
+          print(f"TK_LIBRARY={tk_lib.as_posix()}")
+          PY
+
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
         run: uv run pytest -v
