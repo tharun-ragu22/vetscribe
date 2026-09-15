@@ -19,6 +19,7 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
+              - '!backend/**/*.md'
 
   test:
     strategy:
