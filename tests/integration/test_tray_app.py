@@ -1,7 +1,5 @@
 from unittest.mock import MagicMock
 
-import pytest
-
 from vetscribe.pipeline import PipelineState
 from vetscribe.tray_app import TrayApp, build_icon_image
 
@@ -13,37 +11,10 @@ def test_build_icon_image_returns_image_of_requested_color():
     assert center_pixel[:3] == (0, 128, 0)
 
 
-_created_tray_apps = []
-
-
 def make_tray_app(**overrides):
     pipeline = MagicMock(state=PipelineState.IDLE)
     pipeline.configure_mock(**overrides)
-    tray_app = TrayApp(pipeline=pipeline)
-    _created_tray_apps.append(tray_app)
-    return tray_app, pipeline
-
-
-@pytest.fixture(autouse=True)
-def _unregister_tray_icon_window_classes():
-    # pystray's win32 backend registers a real Win32 window class per Icon in
-    # __init__, named after id(self), and only unregisters it in the mainloop's
-    # finally block -- which never runs here since these tests construct Icon
-    # objects without ever calling run(). Left alone, the class leaks for the
-    # rest of the process; once a since-GC'd Icon's address gets reused by a
-    # later test's Icon, RegisterClassEx collides on the same class name and
-    # raises "OSError: [WinError 1410] Class already exists." Explicitly
-    # unregister after every test so no leaked class can be revived by id()
-    # reuse.
-    yield
-    while _created_tray_apps:
-        icon = _created_tray_apps.pop().icon
-        unregister, atom = getattr(icon, "_unregister_class", None), getattr(icon, "_atom", None)
-        if unregister and atom:
-            try:
-                unregister(atom)
-            except OSError:
-                pass
+    return TrayApp(pipeline=pipeline), pipeline
 
 
 def test_update_icon_for_state_sets_icon_matching_recording_state():
