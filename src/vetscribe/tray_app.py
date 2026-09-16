@@ -65,6 +65,15 @@ class TrayApp:
 
     def update_icon_for_state(self):
         self.icon.icon = build_icon_image(STATE_COLORS[self.pipeline.state])
+        # pystray's win32 backend bakes each menu item's enabled/text state into
+        # the native HMENU once, at construction (or the last update_menu()
+        # call) -- it does not re-evaluate the enabled=/text= callables when the
+        # menu is shown. Without this, "Open Last SOAP Note" stays frozen
+        # disabled (its state when the tray icon was built, before any note
+        # existed) even after a note is generated and the pipeline is back to
+        # IDLE. Refresh it on every state transition so the menu reflects
+        # last_soap_text and the current status text.
+        self.icon.update_menu()
 
     def on_hotkey_triggered(self):
         previous_state = self.pipeline.state

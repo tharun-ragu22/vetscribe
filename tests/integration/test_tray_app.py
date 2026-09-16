@@ -28,6 +28,23 @@ def test_update_icon_for_state_sets_icon_matching_recording_state():
     assert center_pixel[:3] == (255, 0, 0)
 
 
+def test_update_icon_for_state_refreshes_native_menu():
+    # Regression test: pystray's win32 backend bakes each menu item's
+    # enabled/text state into the native menu once, at construction (or the
+    # last update_menu() call) -- it does not re-evaluate the enabled=/text=
+    # callables just because the menu is about to be shown. Without an
+    # explicit update_menu() call on every state transition, "Open Last SOAP
+    # Note" stays frozen disabled (its state when the tray icon was built,
+    # before any note existed) even after a note is generated and the
+    # pipeline goes back to IDLE.
+    tray_app, _pipeline = make_tray_app(state=PipelineState.IDLE)
+    tray_app.icon.update_menu = MagicMock()
+
+    tray_app.update_icon_for_state()
+
+    tray_app.icon.update_menu.assert_called_once()
+
+
 def test_on_hotkey_triggered_toggles_pipeline_and_refreshes_icon():
     tray_app, pipeline = make_tray_app(state=PipelineState.IDLE)
 
