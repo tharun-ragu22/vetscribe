@@ -86,6 +86,7 @@ def build_app(config=None, tk_root=None):
             tk_root, lambda: show_flyout(tk_root, injector, soap_text)
         ),
     )
+    pipeline.on_state_change = lambda state: tray_app.update_icon_for_state()
     tray_app.attach_offline_queue(offline_queue)
     tray_app.attach_tk_root(tk_root)
     hotkey_listener = HotkeyListener(

@@ -141,6 +141,32 @@ def test_toggle_recording_enqueues_audio_to_offline_queue_on_backend_failure(tmp
     assert pipeline.state == PipelineState.IDLE
 
 
+def test_toggle_recording_reports_every_state_transition_via_on_state_change():
+    soap_note = SoapNote(
+        subjective="sub", objective="obj", assessment="assess", plan="plan"
+    )
+    recorder = MagicMock(
+        save_wav=MagicMock(side_effect=lambda path: path.write_bytes(b"fake-wav"))
+    )
+    on_state_change = MagicMock()
+    deps_overrides = dict(
+        recorder=recorder,
+        api_client=MagicMock(generate_soap_note=MagicMock(return_value=soap_note)),
+        injector=MagicMock(inject=MagicMock(return_value=True)),
+        on_state_change=on_state_change,
+    )
+    pipeline, deps = make_pipeline(**deps_overrides)
+
+    pipeline.toggle_recording()
+    pipeline.toggle_recording()
+
+    assert [call.args[0] for call in on_state_change.call_args_list] == [
+        PipelineState.RECORDING,
+        PipelineState.PROCESSING,
+        PipelineState.IDLE,
+    ]
+
+
 def test_toggle_recording_does_not_crash_when_on_error_not_provided(tmp_path):
     recorder = MagicMock(
         save_wav=MagicMock(side_effect=lambda path: path.write_bytes(b"fake-wav-bytes"))

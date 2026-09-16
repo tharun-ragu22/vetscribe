@@ -34,6 +34,7 @@ class Pipeline:
         on_error=None,
         recordings_dir=None,
         offline_queue=None,
+        on_state_change=None,
     ):
         self.recorder = recorder
         self.api_client = api_client
@@ -44,20 +45,25 @@ class Pipeline:
             Path.home() / ".vetscribe" / "recordings"
         )
         self.offline_queue = offline_queue
+        self.on_state_change = on_state_change or (lambda state: None)
         self.state = PipelineState.IDLE
         self.last_soap_text = None
+
+    def _transition(self, new_state):
+        self.state = new_state
+        self.on_state_change(new_state)
 
     def toggle_recording(self):
         if self.state == PipelineState.IDLE:
             logger.info("recording started")
             self.recorder.start()
-            self.state = PipelineState.RECORDING
+            self._transition(PipelineState.RECORDING)
         elif self.state == PipelineState.RECORDING:
             logger.info("recording stopped, processing")
             self._stop_and_process()
 
     def _stop_and_process(self):
-        self.state = PipelineState.PROCESSING
+        self._transition(PipelineState.PROCESSING)
         self.recorder.stop()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -76,7 +82,7 @@ class Pipeline:
             self.on_error(
                 f"SOAP Generation Failed: {exc}. Raw audio saved locally to {saved_path}."
             )
-            self.state = PipelineState.IDLE
+            self._transition(PipelineState.IDLE)
             return
 
         soap_text = format_soap_text(soap_note)
@@ -89,7 +95,7 @@ class Pipeline:
         if not injected:
             self.on_flyout_needed(soap_text)
 
-        self.state = PipelineState.IDLE
+        self._transition(PipelineState.IDLE)
         logger.info("done, back to idle")
 
     def _save_failed_audio(self, audio_bytes):

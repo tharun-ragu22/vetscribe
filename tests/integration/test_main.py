@@ -6,6 +6,7 @@ from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
 from vetscribe.main import build_app
+from vetscribe.pipeline import PipelineState
 
 
 def test_build_app_wires_pipeline_dependencies_from_config():
@@ -30,6 +31,38 @@ def test_build_app_wires_pipeline_dependencies_from_config():
     assert pipeline.injector.title_marker == "PracticeSoft"
     assert returned_root is tk_root
     tk_root.withdraw.assert_called_once()
+
+
+def test_tray_icon_turns_yellow_while_backend_call_is_in_flight():
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    pipeline = tray_app.pipeline
+    pipeline.recorder = MagicMock(save_wav=lambda path: path.write_bytes(b"wav"))
+    pipeline.injector = MagicMock(inject=MagicMock(return_value=True))
+
+    observed_color_mid_call = {}
+
+    def fake_generate_soap_note(_audio_bytes):
+        observed_color_mid_call["value"] = tray_app.icon.icon.getpixel(
+            (tray_app.icon.icon.width // 2, tray_app.icon.icon.height // 2)
+        )
+        raise AssertionError("stop before real network/injection work")
+
+    pipeline.api_client = MagicMock(generate_soap_note=fake_generate_soap_note)
+    pipeline.state = PipelineState.RECORDING
+
+    try:
+        pipeline.toggle_recording()
+    except AssertionError:
+        pass
+
+    assert observed_color_mid_call["value"][:3] == (255, 255, 0)
 
 
 def test_build_app_wires_hotkey_listener_to_tray_app_trigger():
