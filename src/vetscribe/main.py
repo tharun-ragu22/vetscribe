@@ -89,8 +89,20 @@ def build_app(config=None, tk_root=None):
     pipeline.on_state_change = lambda state: tray_app.update_icon_for_state()
     tray_app.attach_offline_queue(offline_queue)
     tray_app.attach_tk_root(tk_root)
+
+    def dispatch_hotkey_trigger():
+        # tray_app.on_hotkey_triggered() runs the full pipeline synchronously,
+        # including the blocking backend call. HotkeyListener invokes this
+        # callback directly on the OS-level global keyboard hook thread, and a
+        # slow low-level keyboard hook stalls key delivery system-wide until
+        # it returns -- any real keypresses during that stall get queued by
+        # Windows and replayed once we return, which can re-fire the hotkey
+        # without the user actually holding it down at that moment. Hand the
+        # work off to a worker thread so the hook callback returns instantly.
+        threading.Thread(target=tray_app.on_hotkey_triggered, daemon=True).start()
+
     hotkey_listener = HotkeyListener(
-        on_trigger=tray_app.on_hotkey_triggered, hotkey=config.hotkey
+        on_trigger=dispatch_hotkey_trigger, hotkey=config.hotkey
     )
     tray_app.attach_hotkey_listener(hotkey_listener)
 

@@ -1,3 +1,5 @@
+import threading
+import time
 from dataclasses import replace
 from unittest.mock import MagicMock
 
@@ -74,9 +76,46 @@ def test_build_app_wires_hotkey_listener_to_tray_app_trigger():
     tk_root = MagicMock()
 
     tray_app, hotkey_listener, _ = build_app(config=config, tk_root=tk_root)
+    triggered = threading.Event()
+    tray_app.on_hotkey_triggered = triggered.set
 
-    assert hotkey_listener.on_trigger == tray_app.on_hotkey_triggered
+    hotkey_listener.on_trigger()
+
+    assert triggered.wait(timeout=1)
     assert tray_app.hotkey_listener is hotkey_listener
+
+
+def test_build_app_hotkey_trigger_returns_immediately_even_when_pipeline_is_slow():
+    # Regression test: the hotkey listener's on_trigger callback fires on the
+    # OS-level global keyboard hook thread. If it blocks for as long as the
+    # pipeline takes (a real backend call), Windows stalls keyboard delivery
+    # system-wide and replays queued keypresses once it returns -- which can
+    # re-fire the hotkey without the user actively holding it down. The
+    # callback build_app wires up must therefore return near-instantly.
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, hotkey_listener, _ = build_app(config=config, tk_root=tk_root)
+    started = threading.Event()
+    release_worker = threading.Event()
+
+    def slow_on_hotkey_triggered():
+        started.set()
+        release_worker.wait(timeout=1)
+
+    tray_app.on_hotkey_triggered = slow_on_hotkey_triggered
+
+    start = time.monotonic()
+    hotkey_listener.on_trigger()
+    elapsed = time.monotonic() - start
+
+    assert started.wait(timeout=1)
+    assert elapsed < 0.1
+    release_worker.set()
 
 
 def test_build_app_wires_configured_hotkey_into_hotkey_listener():
