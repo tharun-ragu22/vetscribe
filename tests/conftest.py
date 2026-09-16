@@ -1,4 +1,3 @@
-import gc
 import sys
 import types
 
@@ -11,7 +10,7 @@ if sys.platform != "win32":
 
 
 @pytest.fixture(autouse=True)
-def _unregister_pystray_window_classes():
+def _unregister_pystray_window_classes(monkeypatch):
     # pystray's win32 backend registers a real Win32 window class per Icon
     # (named after id(self)) in __init__, and only unregisters it inside the
     # mainloop's finally block -- which only runs if something calls
@@ -21,21 +20,34 @@ def _unregister_pystray_window_classes():
     # garbage-collected Icon's address for a later Icon, RegisterClassEx
     # collides on the same class name and raises "OSError: [WinError 1410]
     # Class already exists" -- nondeterministically, depending on GC timing.
-    # Sweep every live Icon after each test (across all test files, since the
-    # leak isn't confined to whichever test constructed it) and unregister
-    # its class so no address reuse can collide with one still on file.
-    yield
+    #
+    # A post-test gc.get_objects() sweep can't catch these: CPython frees an
+    # Icon via refcounting the instant a test function's local variable goes
+    # out of scope, well before this fixture's teardown runs, so by then the
+    # object (and any way to reach its atom) is already gone. Instead, wrap
+    # Icon.__init__ to record every instance *as it's constructed*, holding a
+    # strong reference until teardown explicitly unregisters its class --
+    # only then do we drop the reference and let it be collected normally.
     if sys.platform != "win32":
+        yield
         return
+
     import pystray
 
-    gc.collect()
-    for obj in gc.get_objects():
-        if isinstance(obj, pystray.Icon):
-            atom = getattr(obj, "_atom", None)
-            unregister = getattr(obj, "_unregister_class", None)
-            if atom and unregister:
-                try:
-                    unregister(atom)
-                except OSError:
-                    pass
+    created = []
+    original_init = pystray.Icon.__init__
+
+    def _tracking_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        created.append(self)
+
+    monkeypatch.setattr(pystray.Icon, "__init__", _tracking_init)
+    yield
+    for icon in created:
+        atom = getattr(icon, "_atom", None)
+        unregister = getattr(icon, "_unregister_class", None)
+        if atom and unregister:
+            try:
+                unregister(atom)
+            except OSError:
+                pass
