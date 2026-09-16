@@ -113,10 +113,29 @@ jobs:
         working-directory: backend
         run: uv sync --locked
 
+      # Prefer a pre-warmed remote Ollama server (tunneled via ngrok) when it's reachable --
+      # it's faster than provisioning + pulling the model fresh on the runner every time.
+      # Falls back to the local install below whenever the tunnel is down, so this job never
+      # hard-depends on infra outside CI. The URL is a secret so it isn't exposed in logs.
+      - name: Check remote eval server availability
+        id: remote_check
+        env:
+          REMOTE_OLLAMA_URL: ${{ secrets.REMOTE_OLLAMA_URL }}
+        run: |
+          if [ -n "$REMOTE_OLLAMA_URL" ] && curl -sf --max-time 10 "$REMOTE_OLLAMA_URL" >/dev/null; then
+            echo "remote Ollama server is up, using it"
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "remote Ollama server is not reachable, falling back to local Ollama"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Ollama
+        if: steps.remote_check.outputs.available == 'false'
         run: curl -fsSL https://ollama.com/install.sh | sh
 
       - name: Start Ollama server
+        if: steps.remote_check.outputs.available == 'false'
         run: |
           ollama serve &
           for i in $(seq 1 60); do
@@ -127,12 +146,13 @@ jobs:
           exit 1
 
       - name: Pull gemma4:e4b
+        if: steps.remote_check.outputs.available == 'false'
         run: ollama pull gemma4:e4b
 
       - name: Run note generator evals
         working-directory: backend
         env:
-          OLLAMA_BASE_URL: http://localhost:11434
+          OLLAMA_BASE_URL: ${{ steps.remote_check.outputs.available == 'true' && secrets.REMOTE_OLLAMA_URL || 'http://localhost:11434' }}
           OLLAMA_NOTE_MODEL: gemma4:e4b
         run: uv run python -m evals.note_generator_evals
 
