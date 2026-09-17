@@ -1,6 +1,8 @@
 import logging
 import tkinter as tk
 
+from vetscribe import ui_strings
+
 logger = logging.getLogger("vetscribe.history_ui")
 
 DEFAULT_WIDTH = 720
@@ -25,7 +27,7 @@ class HistoryWindow(tk.Toplevel):
         poll_interval_ms=DEFAULT_POLL_INTERVAL_MS,
     ):
         super().__init__(master)
-        self.title("VetScribe History")
+        self.title(ui_strings.HISTORY_WINDOW_TITLE)
         self.geometry(f"{DEFAULT_WIDTH}x{DEFAULT_HEIGHT}")
         self._load_entries = load_entries
         self.on_copy_and_inject = on_copy_and_inject
@@ -52,11 +54,11 @@ class HistoryWindow(tk.Toplevel):
         detail_frame = tk.Frame(self)
         detail_frame.pack(side="right", fill="both", expand=True)
 
-        tk.Label(detail_frame, text="SOAP Note").pack(anchor="w")
+        tk.Label(detail_frame, text=ui_strings.LABEL_SOAP_NOTE).pack(anchor="w")
         self.note_text = tk.Text(detail_frame, height=12, wrap="word")
         self.note_text.pack(fill="both", expand=True)
 
-        tk.Label(detail_frame, text="Transcript").pack(anchor="w")
+        tk.Label(detail_frame, text=ui_strings.LABEL_TRANSCRIPT).pack(anchor="w")
         self.transcript_text = tk.Text(detail_frame, height=8, wrap="word")
         self.transcript_text.pack(fill="both", expand=True)
 
@@ -64,25 +66,25 @@ class HistoryWindow(tk.Toplevel):
         button_frame.pack(fill="x")
         self.save_button = tk.Button(
             button_frame,
-            text="Save Changes",
+            text=ui_strings.BUTTON_SAVE_CHANGES,
             command=self._on_save_clicked,
         )
         self.save_button.pack(side="left")
         self.copy_and_inject_button = tk.Button(
             button_frame,
-            text="Copy & Inject to AVImark",
+            text=ui_strings.BUTTON_COPY_AND_INJECT,
             command=self._on_copy_and_inject_clicked,
         )
         self.copy_and_inject_button.pack(side="left")
         self.copy_to_clipboard_button = tk.Button(
             button_frame,
-            text="Copy SOAP Note",
+            text=ui_strings.BUTTON_COPY_SOAP_NOTE,
             command=self._on_copy_to_clipboard_clicked,
         )
         self.copy_to_clipboard_button.pack(side="left")
         self.delete_button = tk.Button(
             button_frame,
-            text="Delete Note",
+            text=ui_strings.BUTTON_DELETE_NOTE,
             command=self._on_delete_clicked,
         )
         self.delete_button.pack(side="right")
@@ -207,8 +209,8 @@ class HistoryWindow(tk.Toplevel):
         from tkinter import messagebox
 
         return messagebox.askyesno(
-            "Delete note",
-            "Delete this SOAP note and its transcript? This cannot be undone.",
+            ui_strings.DELETE_CONFIRM_TITLE,
+            ui_strings.DELETE_CONFIRM_MESSAGE,
             parent=self,
         )
 

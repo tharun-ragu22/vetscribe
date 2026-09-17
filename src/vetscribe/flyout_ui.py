@@ -1,5 +1,7 @@
 import tkinter as tk
 
+from vetscribe import ui_strings
+
 DEFAULT_WIDTH = 360
 DEFAULT_HEIGHT = 320
 DEFAULT_MARGIN = 20
@@ -24,12 +26,12 @@ class FlyoutWindow(tk.Toplevel):
         self.text_widget.pack()
 
         self.copy_and_inject_button = tk.Button(
-            self, text="Copy & Inject to AVImark", command=on_copy_and_inject
+            self, text=ui_strings.BUTTON_COPY_AND_INJECT, command=on_copy_and_inject
         )
         self.copy_and_inject_button.pack()
 
         self.copy_to_clipboard_button = tk.Button(
-            self, text="Copy SOAP Note", command=on_copy_to_clipboard
+            self, text=ui_strings.BUTTON_COPY_SOAP_NOTE, command=on_copy_to_clipboard
         )
         self.copy_to_clipboard_button.pack()
         self.update()

@@ -3,6 +3,7 @@ import logging
 import pystray
 from PIL import Image, ImageDraw
 
+from vetscribe import ui_strings
 from vetscribe.pipeline import PipelineState
 
 logger = logging.getLogger("vetscribe.tray_app")
@@ -45,14 +46,18 @@ class TrayApp:
         return pystray.Menu(
             pystray.MenuItem(self._status_text, None, enabled=False),
             pystray.MenuItem(
-                "Open Last SOAP Note",
+                ui_strings.MENU_OPEN_LAST_SOAP_NOTE,
                 lambda icon, item: self.open_last_note(),
                 enabled=lambda item: self.pipeline.last_soap_text is not None,
             ),
-            pystray.MenuItem("View History", lambda icon, item: self.show_history()),
-            pystray.MenuItem("Settings", lambda icon, item: self.open_settings()),
+            pystray.MenuItem(
+                ui_strings.MENU_VIEW_HISTORY, lambda icon, item: self.show_history()
+            ),
+            pystray.MenuItem(
+                ui_strings.MENU_SETTINGS, lambda icon, item: self.open_settings()
+            ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit", lambda icon, item: self.quit()),
+            pystray.MenuItem(ui_strings.MENU_QUIT, lambda icon, item: self.quit()),
         )
 
     def _status_text(self, item):

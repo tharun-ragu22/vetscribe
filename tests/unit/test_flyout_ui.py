@@ -2,6 +2,7 @@ import tkinter
 
 import pytest
 
+from vetscribe import ui_strings
 from vetscribe.flyout_ui import FlyoutWindow
 
 
@@ -36,7 +37,7 @@ def test_copy_and_inject_button_has_expected_label_and_invokes_callback(tk_root)
         on_copy_to_clipboard=lambda: None,
     )
 
-    assert flyout.copy_and_inject_button["text"] == "Copy & Inject to AVImark"
+    assert flyout.copy_and_inject_button["text"] == ui_strings.BUTTON_COPY_AND_INJECT
     flyout.copy_and_inject_button.invoke()
     assert calls == ["inject"]
 
@@ -50,7 +51,7 @@ def test_copy_to_clipboard_button_has_expected_label_and_invokes_callback(tk_roo
         on_copy_to_clipboard=lambda: calls.append("copy"),
     )
 
-    assert flyout.copy_to_clipboard_button["text"] == "Copy SOAP Note"
+    assert flyout.copy_to_clipboard_button["text"] == ui_strings.BUTTON_COPY_SOAP_NOTE
     flyout.copy_to_clipboard_button.invoke()
     assert calls == ["copy"]
 

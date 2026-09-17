@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 
+from vetscribe import ui_strings
 from vetscribe.history_store import HistoryEntry
 from vetscribe.history_ui import HistoryWindow
 
@@ -99,7 +100,7 @@ def test_copy_and_inject_button_sends_selected_entry_soap_text(tk_root):
     )
     window.show_entry(0)
 
-    assert window.copy_and_inject_button["text"] == "Copy & Inject to AVImark"
+    assert window.copy_and_inject_button["text"] == ui_strings.BUTTON_COPY_AND_INJECT
     window.copy_and_inject_button.invoke()
 
     assert len(injected) == 1
@@ -114,7 +115,7 @@ def test_copy_to_clipboard_button_sends_selected_entry_soap_text(tk_root):
     )
     window.show_entry(0)
 
-    assert window.copy_to_clipboard_button["text"] == "Copy SOAP Note"
+    assert window.copy_to_clipboard_button["text"] == ui_strings.BUTTON_COPY_SOAP_NOTE
     window.copy_to_clipboard_button.invoke()
 
     assert len(copied) == 1

@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from vetscribe import ui_strings
 from vetscribe.pipeline import PipelineState
 from vetscribe.tray_app import TrayApp, build_icon_image
 
@@ -68,10 +69,10 @@ def test_menu_has_status_open_note_history_settings_separator_and_quit_items():
     labels = [str(item) for item in tray_app.icon.menu.items]
 
     assert labels[0].startswith("Status:")
-    assert labels[1] == "Open Last SOAP Note"
-    assert labels[2] == "View History"
-    assert labels[3] == "Settings"
-    assert labels[5] == "Quit"
+    assert labels[1] == ui_strings.MENU_OPEN_LAST_SOAP_NOTE
+    assert labels[2] == ui_strings.MENU_VIEW_HISTORY
+    assert labels[3] == ui_strings.MENU_SETTINGS
+    assert labels[5] == ui_strings.MENU_QUIT
 
 
 def test_view_history_menu_item_invokes_on_show_history():
