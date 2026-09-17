@@ -10,9 +10,14 @@ class MockAvimarkWindow(tk.Tk):
         try:
             super().__init__()
         except tk.TclError:
-            # Recreating a Tk root right after a prior one was destroyed can
-            # hit a one-shot Tcl interpreter init race on Windows; retrying
-            # once succeeds.
+            # On Windows, Tk bootstrap can intermittently fail to find its
+            # script library (init.tcl / tk.tcl). Re-point TCL_LIBRARY /
+            # TK_LIBRARY at the directories that actually contain them before
+            # retrying -- retrying with the same broken environment would just
+            # fail again. See tests/tcl_env.py.
+            from tests.tcl_env import ensure_tcl_tk_library_paths
+
+            ensure_tcl_tk_library_paths()
             super().__init__()
         self.title(WINDOW_TITLE)
         self.dump_path = Path(dump_path) if dump_path else None

@@ -54,12 +54,18 @@ jobs:
       # (sys.prefix != sys.base_prefix) with a non-interactive stdin, which is
       # always true for a non-TTY GitHub Actions step. In that combination, Tk's
       # console-window init spawns a second Tcl interpreter that doesn't inherit
-      # the tcl_library value Python computed, so it can't find its own install.
-      # Setting TCL_LIBRARY/TK_LIBRARY explicitly sidesteps this — the same
-      # workaround the CPython/python-build-standalone maintainers point to,
-      # pending an upstream fix. Derived from sys.base_prefix (the interpreter
-      # actually backing .venv) rather than hardcoded, so it tracks whichever
-      # Python version/tcl release the runner image ships.
+      # the tcl_library value Python computed, so it falls back to a
+      # nondeterministic auto-search for its script library. Setting
+      # TCL_LIBRARY/TK_LIBRARY explicitly sidesteps this.
+      #
+      # Crucially, select the directory that actually contains init.tcl / tk.tcl
+      # rather than the first glob("tcl8*") hit: a Tcl install ships both a
+      # `tcl8` "Tcl Modules" dir (no init.tcl) and the real `tcl8.6` script
+      # library, and glob order is filesystem order -- picking `tcl8` silently
+      # defeats this workaround and leaves Tk on its flaky fallback. Derived
+      # from sys.base_prefix so it tracks whichever Python/tcl the runner ships.
+      # (tests/conftest.py applies the same fix in-process as the real guard;
+      # this step just makes the CI environment consistent for good measure.)
       - name: Set Tcl/Tk library paths (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -67,11 +73,17 @@ jobs:
           uv run python - <<'PY' >> "$GITHUB_ENV"
           import sys
           from pathlib import Path
-          tcl_dir = Path(sys.base_prefix) / "tcl"
-          tcl_lib = next(tcl_dir.glob("tcl8*"))
-          tk_lib = next(tcl_dir.glob("tk8*"))
-          print(f"TCL_LIBRARY={tcl_lib.as_posix()}")
-          print(f"TK_LIBRARY={tk_lib.as_posix()}")
+
+          def find(patterns, required_file):
+              tcl_dir = Path(sys.base_prefix) / "tcl"
+              for pattern in patterns:
+                  for candidate in sorted(tcl_dir.glob(pattern)):
+                      if (candidate / required_file).is_file():
+                          return candidate
+              raise SystemExit(f"no dir matching {patterns} contains {required_file}")
+
+          print(f"TCL_LIBRARY={find(('tcl9*', 'tcl8*'), 'init.tcl').as_posix()}")
+          print(f"TK_LIBRARY={find(('tk9*', 'tk8*'), 'tk.tcl').as_posix()}")
           PY
 
       - name: Run tests (Windows)

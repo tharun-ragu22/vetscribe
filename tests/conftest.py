@@ -3,6 +3,14 @@ import types
 
 import pytest
 
+from tests.tcl_env import ensure_tcl_tk_library_paths
+
+# Correct TCL_LIBRARY / TK_LIBRARY at import time -- before pytest collects any
+# test that constructs a Tk root -- so tkinter bootstraps deterministically on
+# Windows instead of relying on Tk's flaky auto-search. No-op off Windows.
+# See tests/tcl_env.py for the full root-cause writeup.
+ensure_tcl_tk_library_paths()
+
 if sys.platform != "win32":
     for _name in ("win32api", "win32con", "win32gui", "win32clipboard", "pywintypes", "winreg"):
         if _name not in sys.modules:
