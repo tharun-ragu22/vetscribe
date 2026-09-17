@@ -57,7 +57,7 @@ def show_flyout(tk_root, injector, soap_text):
 def show_history(tk_root, injector, history_store):
     window = HistoryWindow(
         master=tk_root,
-        entries=history_store.list_entries(),
+        load_entries=history_store.list_entries,
         on_copy_and_inject=lambda soap_text: injector.inject(soap_text),
         on_copy_to_clipboard=lambda soap_text: pyperclip.copy(soap_text),
     )

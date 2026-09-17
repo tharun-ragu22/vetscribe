@@ -320,7 +320,9 @@ def test_view_history_opens_window_with_notes_from_both_save_paths(mocker, tmp_p
     mock_history_window.assert_called_once()
     _, kwargs = mock_history_window.call_args
     assert kwargs["master"] is tk_root
-    subjectives = [entry.subjective for entry in kwargs["entries"]]
+    # The window is handed a callable that reads the shared store live, so it can
+    # refresh; calling it must surface notes written via either save path.
+    subjectives = [entry.subjective for entry in kwargs["load_entries"]()]
     assert "from pipeline" in subjectives
     assert "from retry" in subjectives
 

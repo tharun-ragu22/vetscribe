@@ -1,17 +1,33 @@
+import logging
 import tkinter as tk
+
+logger = logging.getLogger("vetscribe.history_ui")
 
 DEFAULT_WIDTH = 720
 DEFAULT_HEIGHT = 480
+# How often an open window re-reads the store so notes recorded while it's open
+# appear without the vet reopening it. A save happens on the pipeline thread or
+# the offline-queue thread; polling on the Tk event loop picks up both without
+# any cross-thread widget access.
+DEFAULT_POLL_INTERVAL_MS = 1000
 
 
 class HistoryWindow(tk.Toplevel):
-    def __init__(self, master, entries, on_copy_and_inject, on_copy_to_clipboard):
+    def __init__(
+        self,
+        master,
+        load_entries,
+        on_copy_and_inject,
+        on_copy_to_clipboard,
+        poll_interval_ms=DEFAULT_POLL_INTERVAL_MS,
+    ):
         super().__init__(master)
         self.title("VetScribe History")
         self.geometry(f"{DEFAULT_WIDTH}x{DEFAULT_HEIGHT}")
-        self.entries = list(entries)
+        self._load_entries = load_entries
         self.on_copy_and_inject = on_copy_and_inject
         self.on_copy_to_clipboard = on_copy_to_clipboard
+        self.entries = list(load_entries())
         self._selected_index = None
 
         # Left: scrollable list of past notes, newest first.
@@ -22,8 +38,6 @@ class HistoryWindow(tk.Toplevel):
         scrollbar = tk.Scrollbar(list_frame, command=self.listbox.yview)
         scrollbar.pack(side="right", fill="y")
         self.listbox.config(yscrollcommand=scrollbar.set)
-        for entry in self.entries:
-            self.listbox.insert("end", self._row_label(entry))
         self.listbox.bind("<<ListboxSelect>>", self._on_listbox_select)
 
         # Right: the selected note and its transcript.
@@ -53,10 +67,17 @@ class HistoryWindow(tk.Toplevel):
         )
         self.copy_to_clipboard_button.pack(side="left")
 
+        self._populate_listbox()
         # Show the newest note by default so the window is useful on open.
         if self.entries:
-            self.listbox.selection_set(0)
-            self.show_entry(0)
+            self._select(0)
+
+        # Auto-refresh so notes recorded while the window is open show up live.
+        self._poll_interval_ms = poll_interval_ms
+        self._poll_job = None
+        self.bind("<Destroy>", self._on_destroy)
+        if poll_interval_ms:
+            self._schedule_poll()
 
     @staticmethod
     def _row_label(entry) -> str:
@@ -64,6 +85,55 @@ class HistoryWindow(tk.Toplevel):
         if len(preview) > 40:
             preview = preview[:39] + "…"
         return f"{entry.timestamp}  {preview}"
+
+    def _populate_listbox(self):
+        self.listbox.delete(0, "end")
+        for entry in self.entries:
+            self.listbox.insert("end", self._row_label(entry))
+
+    def refresh(self):
+        """Re-read the store and reflect any notes added since the last read.
+
+        If the vet is viewing the newest note (or nothing yet), advance to the
+        just-recorded note; if they've deliberately opened an older note, keep
+        their selection so they aren't yanked away mid-read.
+        """
+        new_entries = list(self._load_entries())
+        if new_entries == self.entries:
+            return
+
+        viewing_newest = self._selected_index in (None, 0)
+        previously_selected = self._selected_entry()
+
+        self.entries = new_entries
+        self._populate_listbox()
+
+        if not self.entries:
+            self._selected_index = None
+            self._replace_text(self.note_text, "")
+            self._replace_text(self.transcript_text, "")
+            return
+
+        if viewing_newest:
+            target = 0
+        else:
+            target = self._index_of(previously_selected)
+            if target is None:
+                target = 0
+        self._select(target)
+
+    def _index_of(self, entry):
+        if entry is None:
+            return None
+        for index, candidate in enumerate(self.entries):
+            if candidate == entry:
+                return index
+        return None
+
+    def _select(self, index):
+        self.listbox.selection_clear(0, "end")
+        self.listbox.selection_set(index)
+        self.show_entry(index)
 
     def show_entry(self, index):
         entry = self.entries[index]
@@ -95,3 +165,28 @@ class HistoryWindow(tk.Toplevel):
         entry = self._selected_entry()
         if entry is not None:
             self.on_copy_to_clipboard(entry.soap_text)
+
+    def _schedule_poll(self):
+        self._poll_job = self.after(self._poll_interval_ms, self._poll)
+
+    def _poll(self):
+        self._poll_job = None
+        if not self.winfo_exists():
+            return
+        try:
+            self.refresh()
+        except Exception:
+            # A history read must never crash or kill the live-refresh loop.
+            logger.exception("failed to refresh history window")
+        if self._poll_interval_ms:
+            self._schedule_poll()
+
+    def _on_destroy(self, event):
+        # Stop the poll loop when the window goes away so a pending `after`
+        # callback never fires against a destroyed widget.
+        if event.widget is self and self._poll_job is not None:
+            try:
+                self.after_cancel(self._poll_job)
+            except tk.TclError:
+                pass
+            self._poll_job = None
