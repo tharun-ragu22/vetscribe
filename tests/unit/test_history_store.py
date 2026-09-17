@@ -1,3 +1,5 @@
+import json
+
 from vetscribe.api_client import SoapNote
 from vetscribe.history_store import HistoryStore
 
@@ -56,6 +58,37 @@ def test_newest_first_holds_when_the_clock_is_too_coarse_to_distinguish_saves(
 
     subjectives = [entry.subjective for entry in store.list_entries()]
     assert subjectives == ["third", "second", "first"]
+
+
+def test_ordering_follows_timestamp_across_legacy_and_current_id_formats(tmp_path):
+    # An older build named files note_YYYYMMDD_HHMMSS_... which, sorted as plain
+    # strings, land ABOVE the current note_<nanoseconds>_... ids ("2026" > "17..").
+    # A filename-only sort therefore pushed freshly recorded notes to the bottom.
+    # Ordering must follow the recorded timestamp, so newest is always on top.
+    def payload(timestamp, subjective):
+        return json.dumps(
+            {
+                "timestamp": timestamp,
+                "subjective": subjective,
+                "objective": "o",
+                "assessment": "a",
+                "plan": "p",
+                "transcript": "",
+                "edited_soap_text": "",
+            }
+        )
+
+    (tmp_path / "note_20260917_090000_000000_aaaaaaaa.json").write_text(
+        payload("2026-09-17T09:00:00", "legacy older")
+    )
+    (tmp_path / "note_1789676885891929979_000000000_bbbbbbbb.json").write_text(
+        payload("2026-09-17T17:00:00", "current newer")
+    )
+
+    store = HistoryStore(history_dir=tmp_path)
+
+    subjectives = [entry.subjective for entry in store.list_entries()]
+    assert subjectives == ["current newer", "legacy older"]
 
 
 def test_entry_exposes_formatted_soap_text_for_copy_and_inject(tmp_path):

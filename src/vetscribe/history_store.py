@@ -108,14 +108,19 @@ class HistoryStore:
         if not self.history_dir.exists():
             return []
         entries = []
-        # Filenames embed a microsecond timestamp, so sorting by name puts the
-        # newest note first even when several share the same display timestamp.
-        for path in sorted(self.history_dir.glob("note_*.json"), reverse=True):
+        for path in self.history_dir.glob("note_*.json"):
             try:
                 data = json.loads(path.read_text())
                 entries.append(self._entry_from_data(data, path.stem))
             except (OSError, ValueError, KeyError) as exc:
                 logger.warning("skipping unreadable history file %s: %s", path, exc)
+        # Newest first, by the recorded timestamp rather than the filename: a
+        # past change to the id format means legacy filenames sort lexically
+        # above current ones, which would push freshly recorded notes to the
+        # bottom. The ISO timestamp orders correctly across both formats; the
+        # entry_id breaks ties between notes saved within the same second (its
+        # embedded sub-second counter preserves insertion order).
+        entries.sort(key=lambda entry: (entry.timestamp, entry.entry_id), reverse=True)
         return entries
 
     def _path_for(self, entry_id) -> Path:

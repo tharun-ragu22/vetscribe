@@ -36,7 +36,7 @@ def run_on_main_thread(tk_root, fn):
         tk_root.after(0, fn)
 
 
-def show_flyout(tk_root, injector, soap_text):
+def show_flyout(tk_root, injector, soap_text, on_open_history=None):
     def on_copy_and_inject():
         injector.inject(soap_text)
         flyout.destroy()
@@ -45,11 +45,20 @@ def show_flyout(tk_root, injector, soap_text):
         pyperclip.copy(soap_text)
         flyout.destroy()
 
+    open_history = None
+    if on_open_history is not None:
+        # Close the transient popup as we hand the vet over to the full history
+        # window (where they can read the transcript and older notes).
+        def open_history():
+            flyout.destroy()
+            on_open_history()
+
     flyout = FlyoutWindow(
         master=tk_root,
         soap_text=soap_text,
         on_copy_and_inject=on_copy_and_inject,
         on_copy_to_clipboard=on_copy_to_clipboard,
+        on_open_history=open_history,
     )
     return flyout
 
@@ -77,10 +86,21 @@ def build_app(config=None, tk_root=None):
     api_client = ApiClient(config.api_endpoint, config.api_timeout_seconds, config.api_key)
     injector = AvimarkInjector(title_marker=config.target_window_matcher)
     history_store = HistoryStore()
+
+    # A note flyout offers an "Open History" button; an error flyout doesn't
+    # (there's no note to browse), so it goes through show_flyout directly.
+    def show_note_flyout(soap_text):
+        show_flyout(
+            tk_root,
+            injector,
+            soap_text,
+            on_open_history=lambda: show_history(tk_root, injector, history_store),
+        )
+
     offline_queue = OfflineQueue(
         api_client=api_client,
         on_note_ready=lambda soap_text: run_on_main_thread(
-            tk_root, lambda: show_flyout(tk_root, injector, soap_text)
+            tk_root, lambda: show_note_flyout(soap_text)
         ),
         history_store=history_store,
     )
@@ -90,7 +110,7 @@ def build_app(config=None, tk_root=None):
         api_client=api_client,
         injector=injector,
         on_flyout_needed=lambda soap_text: run_on_main_thread(
-            tk_root, lambda: show_flyout(tk_root, injector, soap_text)
+            tk_root, lambda: show_note_flyout(soap_text)
         ),
         on_error=lambda message: run_on_main_thread(
             tk_root, lambda: show_flyout(tk_root, injector, message)
@@ -102,7 +122,7 @@ def build_app(config=None, tk_root=None):
     tray_app = TrayApp(
         pipeline=pipeline,
         on_show_note=lambda soap_text: run_on_main_thread(
-            tk_root, lambda: show_flyout(tk_root, injector, soap_text)
+            tk_root, lambda: show_note_flyout(soap_text)
         ),
         on_show_history=lambda: run_on_main_thread(
             tk_root, lambda: show_history(tk_root, injector, history_store)

@@ -171,6 +171,43 @@ def test_build_app_error_callback_shows_flyout_with_error_message(mocker):
     assert kwargs["soap_text"] == "SOAP Generation Failed: backend unreachable."
 
 
+def test_note_flyout_offers_open_history_that_opens_the_history_window(mocker):
+    mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
+    mock_history_cls = mocker.patch("vetscribe.main.HistoryWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    tray_app.pipeline.on_flyout_needed("SUBJECTIVE: text")
+
+    _, kwargs = mock_flyout_cls.call_args
+    open_history = kwargs["on_open_history"]
+    assert open_history is not None
+    # Clicking it brings the vet to the full history window.
+    open_history()
+    mock_history_cls.assert_called_once()
+
+
+def test_error_flyout_has_no_open_history_button(mocker):
+    mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    tray_app.pipeline.on_error("SOAP Generation Failed: backend unreachable.")
+
+    _, kwargs = mock_flyout_cls.call_args
+    assert kwargs["on_open_history"] is None
+
+
 def test_open_last_note_shows_flyout_with_last_soap_text(mocker):
     mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
     config = Config(

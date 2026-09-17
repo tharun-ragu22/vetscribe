@@ -18,6 +18,7 @@ MENU_QUIT = "Quit"
 # Buttons
 BUTTON_COPY_AND_INJECT = "Copy & Inject to AVImark"
 BUTTON_COPY_SOAP_NOTE = "Copy SOAP Note"
+BUTTON_OPEN_HISTORY = "Open History"
 BUTTON_DELETE_NOTE = "Delete Note"
 BUTTON_SAVE_CHANGES = "Save Changes"
 BUTTON_SAVE = "Save"

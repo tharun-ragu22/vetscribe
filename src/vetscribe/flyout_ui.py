@@ -8,7 +8,14 @@ DEFAULT_MARGIN = 20
 
 
 class FlyoutWindow(tk.Toplevel):
-    def __init__(self, master, soap_text, on_copy_and_inject, on_copy_to_clipboard):
+    def __init__(
+        self,
+        master,
+        soap_text,
+        on_copy_and_inject,
+        on_copy_to_clipboard,
+        on_open_history=None,
+    ):
         super().__init__(master)
         self.attributes("-topmost", True)
         self.geometry(
@@ -34,6 +41,16 @@ class FlyoutWindow(tk.Toplevel):
             self, text=ui_strings.BUTTON_COPY_SOAP_NOTE, command=on_copy_to_clipboard
         )
         self.copy_to_clipboard_button.pack()
+
+        # Only offered when there's a note to browse -- error-message flyouts
+        # pass no callback and omit the button entirely.
+        self.open_history_button = None
+        if on_open_history is not None:
+            self.open_history_button = tk.Button(
+                self, text=ui_strings.BUTTON_OPEN_HISTORY, command=on_open_history
+            )
+            self.open_history_button.pack()
+
         self.update()
 
     @staticmethod

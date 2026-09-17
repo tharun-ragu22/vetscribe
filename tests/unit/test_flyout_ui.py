@@ -56,6 +56,33 @@ def test_copy_to_clipboard_button_has_expected_label_and_invokes_callback(tk_roo
     assert calls == ["copy"]
 
 
+def test_open_history_button_invokes_callback_when_provided(tk_root):
+    calls = []
+    flyout = FlyoutWindow(
+        master=tk_root,
+        soap_text="text",
+        on_copy_and_inject=lambda: None,
+        on_copy_to_clipboard=lambda: None,
+        on_open_history=lambda: calls.append("history"),
+    )
+
+    assert flyout.open_history_button["text"] == ui_strings.BUTTON_OPEN_HISTORY
+    flyout.open_history_button.invoke()
+    assert calls == ["history"]
+
+
+def test_open_history_button_is_absent_when_no_callback_is_given(tk_root):
+    # Error-message flyouts have no note to browse, so they omit the button.
+    flyout = FlyoutWindow(
+        master=tk_root,
+        soap_text="text",
+        on_copy_and_inject=lambda: None,
+        on_copy_to_clipboard=lambda: None,
+    )
+
+    assert flyout.open_history_button is None
+
+
 def test_flyout_window_is_topmost(tk_root):
     flyout = FlyoutWindow(
         master=tk_root,
