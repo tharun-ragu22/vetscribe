@@ -1,4 +1,5 @@
 import sys
+import time
 import types
 
 import pytest
@@ -10,6 +11,30 @@ from tests.tcl_env import ensure_tcl_tk_library_paths
 # Windows instead of relying on Tk's flaky auto-search. No-op off Windows.
 # See tests/tcl_env.py for the full root-cause writeup.
 ensure_tcl_tk_library_paths()
+
+if sys.platform == "win32":
+    import tkinter as _tk
+
+    _original_tk_init = _tk.Tk.__init__
+
+    def _tk_init_with_tcl_retry(self, *args, **kwargs):
+        # Even with the library paths corrected, the Windows CI runner
+        # occasionally fails to read Tk's (present) script library -- init.tcl
+        # or tk.tcl -- on the first try, a runner-level filesystem transient.
+        # Re-assert the paths and retry briefly so a transient miss self-heals
+        # instead of failing the whole suite. Covers every Tk root the tests
+        # build (fixtures and MockAvimarkWindow), not just one call site.
+        for attempt in range(4):
+            try:
+                _original_tk_init(self, *args, **kwargs)
+                return
+            except _tk.TclError:
+                if attempt == 3:
+                    raise
+                ensure_tcl_tk_library_paths()
+                time.sleep(0.1)
+
+    _tk.Tk.__init__ = _tk_init_with_tcl_retry
 
 if sys.platform != "win32":
     for _name in ("win32api", "win32con", "win32gui", "win32clipboard", "pywintypes", "winreg"):

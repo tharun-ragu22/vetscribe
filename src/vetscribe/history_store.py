@@ -1,5 +1,7 @@
+import itertools
 import json
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +15,13 @@ logger = logging.getLogger("vetscribe.history_store")
 
 def get_history_dir() -> Path:
     return get_appdata_base_dir() / "history"
+
+
+def _now_ns() -> int:
+    # Wrapped so tests can simulate a coarse clock; time.time_ns() is
+    # high-resolution on all supported platforms, unlike datetime.now() whose
+    # resolution is coarse on Windows.
+    return time.time_ns()
 
 
 @dataclass
@@ -39,16 +48,24 @@ class HistoryEntry:
 class HistoryStore:
     def __init__(self, history_dir=None):
         self.history_dir = Path(history_dir) if history_dir else get_history_dir()
+        # Strictly increasing within the process, so notes saved in the same
+        # clock tick still sort in insertion order (see entry_id below). Shared
+        # across the pipeline and offline-queue threads via the one store
+        # instance; next() is atomic under the GIL.
+        self._sequence = itertools.count()
 
     def save(self, soap_note) -> HistoryEntry:
         self.history_dir.mkdir(parents=True, exist_ok=True)
-        now = datetime.now()
-        # A microsecond timestamp plus a short random suffix keeps filenames
-        # unique even if two notes are saved in the same instant (the live
-        # pipeline and the offline-queue retry run on separate threads).
-        entry_id = f"note_{now.strftime('%Y%m%d_%H%M%S_%f')}_{uuid.uuid4().hex[:8]}"
+        # Newest-first ordering is by filename, so the id must sort in creation
+        # order: a high-resolution timestamp (orders across process restarts)
+        # then a per-process counter (breaks ties when the clock is too coarse
+        # to distinguish rapid saves -- e.g. datetime/now resolution on
+        # Windows), then a random suffix purely for uniqueness.
+        entry_id = (
+            f"note_{_now_ns():019d}_{next(self._sequence):09d}_{uuid.uuid4().hex[:8]}"
+        )
         payload = {
-            "timestamp": now.isoformat(timespec="seconds"),
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
             "subjective": soap_note.subjective,
             "objective": soap_note.objective,
             "assessment": soap_note.assessment,

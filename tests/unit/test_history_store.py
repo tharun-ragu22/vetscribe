@@ -38,6 +38,26 @@ def test_list_entries_returns_newest_first(tmp_path):
     assert subjectives == ["third", "second", "first"]
 
 
+def test_newest_first_holds_when_the_clock_is_too_coarse_to_distinguish_saves(
+    tmp_path, monkeypatch
+):
+    # On Windows the clock resolution is coarse enough that several notes saved
+    # in quick succession get the same timestamp. Ordering must still reflect
+    # insertion order, not degrade to a random tiebreak. Freeze the timestamp
+    # so ordering can only come from the insertion counter.
+    import vetscribe.history_store as history_store
+
+    monkeypatch.setattr(history_store, "_now_ns", lambda: 1_700_000_000_000_000_000)
+    store = HistoryStore(history_dir=tmp_path)
+
+    store.save(make_note(subjective="first"))
+    store.save(make_note(subjective="second"))
+    store.save(make_note(subjective="third"))
+
+    subjectives = [entry.subjective for entry in store.list_entries()]
+    assert subjectives == ["third", "second", "first"]
+
+
 def test_entry_exposes_formatted_soap_text_for_copy_and_inject(tmp_path):
     store = HistoryStore(history_dir=tmp_path)
 
