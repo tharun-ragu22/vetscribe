@@ -29,7 +29,7 @@ class FlyoutWindow(tk.Toplevel):
         self.copy_and_inject_button.pack()
 
         self.copy_to_clipboard_button = tk.Button(
-            self, text="Copy to Clipboard", command=on_copy_to_clipboard
+            self, text="Copy SOAP Note", command=on_copy_to_clipboard
         )
         self.copy_to_clipboard_button.pack()
         self.update()

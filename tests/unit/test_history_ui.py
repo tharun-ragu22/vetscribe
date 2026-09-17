@@ -114,7 +114,7 @@ def test_copy_to_clipboard_button_sends_selected_entry_soap_text(tk_root):
     )
     window.show_entry(0)
 
-    assert window.copy_to_clipboard_button["text"] == "Copy to Clipboard"
+    assert window.copy_to_clipboard_button["text"] == "Copy SOAP Note"
     window.copy_to_clipboard_button.invoke()
 
     assert len(copied) == 1

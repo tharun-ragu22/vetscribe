@@ -76,7 +76,7 @@ class HistoryWindow(tk.Toplevel):
         self.copy_and_inject_button.pack(side="left")
         self.copy_to_clipboard_button = tk.Button(
             button_frame,
-            text="Copy to Clipboard",
+            text="Copy SOAP Note",
             command=self._on_copy_to_clipboard_clicked,
         )
         self.copy_to_clipboard_button.pack(side="left")

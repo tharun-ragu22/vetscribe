@@ -50,7 +50,7 @@ def test_copy_to_clipboard_button_has_expected_label_and_invokes_callback(tk_roo
         on_copy_to_clipboard=lambda: calls.append("copy"),
     )
 
-    assert flyout.copy_to_clipboard_button["text"] == "Copy to Clipboard"
+    assert flyout.copy_to_clipboard_button["text"] == "Copy SOAP Note"
     flyout.copy_to_clipboard_button.invoke()
     assert calls == ["copy"]
 
