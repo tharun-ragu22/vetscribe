@@ -2,13 +2,13 @@ import httpx
 from fastapi.testclient import TestClient
 
 from vetscribe_backend.app import create_app
-from vetscribe_backend.schemas import SoapNote
+from vetscribe_backend.schemas import SoapNote, SoapResult
 from vetscribe_backend.transcription.gemini_transcriber import TranscriptionError
 
 
 class FakePipeline:
-    def __init__(self, note=None, error=None):
-        self.note = note
+    def __init__(self, note=None, transcript="", error=None):
+        self.result = SoapResult(note=note, transcript=transcript) if note is not None else None
         self.error = error
         self.received_audio = None
 
@@ -16,12 +16,12 @@ class FakePipeline:
         self.received_audio = audio_bytes
         if self.error is not None:
             raise self.error
-        return self.note
+        return self.result
 
 
-def test_create_soap_note_returns_200_with_note_json(make_config):
+def test_create_soap_note_returns_200_with_note_and_transcript_json(make_config):
     note = SoapNote(subjective="s", objective="o", assessment="a", plan="p")
-    pipeline = FakePipeline(note=note)
+    pipeline = FakePipeline(note=note, transcript="owner reports vomiting")
     app = create_app(config=make_config(), pipeline=pipeline)
     client = TestClient(app)
 
@@ -30,7 +30,13 @@ def test_create_soap_note_returns_200_with_note_json(make_config):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"}
+    assert response.json() == {
+        "subjective": "s",
+        "objective": "o",
+        "assessment": "a",
+        "plan": "p",
+        "transcript": "owner reports vomiting",
+    }
     assert pipeline.received_audio == b"RIFF....audio...."
 
 

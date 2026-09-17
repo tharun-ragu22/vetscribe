@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from vetscribe.api_client import ApiClientError, SoapNote
+from vetscribe.history_store import HistoryStore
 from vetscribe.pipeline import Pipeline, PipelineState
 
 
@@ -165,6 +166,64 @@ def test_toggle_recording_reports_every_state_transition_via_on_state_change():
         PipelineState.PROCESSING,
         PipelineState.IDLE,
     ]
+
+
+def test_toggle_recording_saves_successful_note_to_history(tmp_path):
+    soap_note = SoapNote(
+        subjective="Annual checkup",
+        objective="obj",
+        assessment="assess",
+        plan="plan",
+        transcript="owner reports the dog is doing well",
+    )
+    recorder = MagicMock(
+        save_wav=MagicMock(side_effect=lambda path: path.write_bytes(b"fake-wav"))
+    )
+    history_store = HistoryStore(history_dir=tmp_path / "history")
+    deps_overrides = dict(
+        recorder=recorder,
+        api_client=MagicMock(generate_soap_note=MagicMock(return_value=soap_note)),
+        injector=MagicMock(inject=MagicMock(return_value=True)),
+        history_store=history_store,
+    )
+    pipeline, deps = make_pipeline(**deps_overrides)
+    pipeline.state = PipelineState.RECORDING
+
+    pipeline.toggle_recording()
+
+    entries = history_store.list_entries()
+    assert len(entries) == 1
+    assert entries[0].subjective == "Annual checkup"
+    assert entries[0].transcript == "owner reports the dog is doing well"
+
+
+def test_history_save_failure_still_delivers_note_and_does_not_wedge_pipeline(tmp_path):
+    # A failing history store must not block injecting the note nor leave the
+    # pipeline stuck in PROCESSING (which would make the hotkey a silent no-op).
+    soap_note = SoapNote(
+        subjective="sub", objective="obj", assessment="assess", plan="plan"
+    )
+    recorder = MagicMock(
+        save_wav=MagicMock(side_effect=lambda path: path.write_bytes(b"fake-wav"))
+    )
+    failing_store = MagicMock(save=MagicMock(side_effect=OSError("disk full")))
+    deps_overrides = dict(
+        recorder=recorder,
+        api_client=MagicMock(generate_soap_note=MagicMock(return_value=soap_note)),
+        injector=MagicMock(inject=MagicMock(return_value=True)),
+        history_store=failing_store,
+    )
+    pipeline, deps = make_pipeline(**deps_overrides)
+    pipeline.state = PipelineState.RECORDING
+
+    pipeline.toggle_recording()
+
+    # The note still reached the user despite the history failure...
+    deps["injector"].inject.assert_called_once()
+    # ...and the pipeline recovered: the next hotkey press starts recording again.
+    pipeline.toggle_recording()
+    deps["recorder"].start.assert_called_once()
+    assert pipeline.state == PipelineState.RECORDING
 
 
 def test_toggle_recording_does_not_crash_when_on_error_not_provided(tmp_path):

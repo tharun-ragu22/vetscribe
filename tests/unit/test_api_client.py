@@ -32,6 +32,49 @@ def test_generate_soap_note_posts_audio_bytes_and_returns_parsed_note():
 
 
 @respx.mock
+def test_generate_soap_note_parses_transcript_from_response():
+    respx.post("https://vetscribe.example.com/api/soap").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "subjective": "sub",
+                "objective": "obj",
+                "assessment": "assess",
+                "plan": "plan",
+                "transcript": "The owner reports the dog has been vomiting since yesterday.",
+            },
+        )
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=30)
+    note = client.generate_soap_note(b"RIFF....")
+
+    assert note.transcript == "The owner reports the dog has been vomiting since yesterday."
+
+
+@respx.mock
+def test_generate_soap_note_defaults_transcript_to_empty_when_absent():
+    # Older backends respond without a transcript field; the client must not
+    # crash and should surface an empty transcript rather than raising.
+    respx.post("https://vetscribe.example.com/api/soap").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "subjective": "sub",
+                "objective": "obj",
+                "assessment": "assess",
+                "plan": "plan",
+            },
+        )
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=30)
+    note = client.generate_soap_note(b"RIFF....")
+
+    assert note.transcript == ""
+
+
+@respx.mock
 def test_generate_soap_note_raises_api_client_error_on_timeout():
     respx.post("https://vetscribe.example.com/api/soap").mock(
         side_effect=httpx.TimeoutException("timed out")

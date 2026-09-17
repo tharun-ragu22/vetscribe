@@ -3,7 +3,7 @@ import time
 from dataclasses import replace
 from unittest.mock import MagicMock
 
-from vetscribe.api_client import ApiClient
+from vetscribe.api_client import ApiClient, SoapNote
 from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
@@ -290,6 +290,39 @@ def test_build_app_wires_offline_queue_into_pipeline_and_tray_app():
 
     assert tray_app.offline_queue is tray_app.pipeline.offline_queue
     assert tray_app.offline_queue.api_client is tray_app.pipeline.api_client
+
+
+def test_view_history_opens_window_with_notes_from_both_save_paths(mocker, tmp_path):
+    # The history the user browses must be the same store the live pipeline and
+    # the offline-queue retry both write into -- so a note from either path
+    # shows up when they open the history window.
+    mock_history_window = mocker.patch("vetscribe.main.HistoryWindow")
+    mocker.patch(
+        "vetscribe.history_store.get_history_dir", return_value=tmp_path / "history"
+    )
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    tray_app.pipeline.history_store.save(
+        SoapNote(subjective="from pipeline", objective="o", assessment="a", plan="p")
+    )
+    tray_app.offline_queue.history_store.save(
+        SoapNote(subjective="from retry", objective="o", assessment="a", plan="p")
+    )
+
+    tray_app.show_history()
+
+    mock_history_window.assert_called_once()
+    _, kwargs = mock_history_window.call_args
+    assert kwargs["master"] is tk_root
+    subjectives = [entry.subjective for entry in kwargs["entries"]]
+    assert "from pipeline" in subjectives
+    assert "from retry" in subjectives
 
 
 def test_build_app_offline_queue_on_note_ready_shows_flyout(mocker):

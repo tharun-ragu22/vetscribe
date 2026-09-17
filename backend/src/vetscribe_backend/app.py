@@ -31,7 +31,7 @@ def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | Non
             return JSONResponse({"error": "empty request body"}, status_code=400)
 
         try:
-            soap_note = pipeline.process(audio_bytes)
+            result = pipeline.process(audio_bytes)
         except httpx.HTTPStatusError as exc:
             return JSONResponse({"error": f"upstream provider error: {exc}"}, status_code=502)
         except httpx.RequestError as exc:
@@ -39,6 +39,6 @@ def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | Non
         except (NoteParsingError, TranscriptionError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=502)
 
-        return JSONResponse(soap_note.to_dict())
+        return JSONResponse(result.to_dict())
 
     return app

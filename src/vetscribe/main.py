@@ -11,6 +11,8 @@ from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
 from vetscribe.flyout_ui import FlyoutWindow
+from vetscribe.history_store import HistoryStore
+from vetscribe.history_ui import HistoryWindow
 from vetscribe.hotkey_listener import HotkeyListener
 from vetscribe.logger import build_logger
 from vetscribe.offline_queue import OfflineQueue
@@ -52,6 +54,16 @@ def show_flyout(tk_root, injector, soap_text):
     return flyout
 
 
+def show_history(tk_root, injector, history_store):
+    window = HistoryWindow(
+        master=tk_root,
+        entries=history_store.list_entries(),
+        on_copy_and_inject=lambda soap_text: injector.inject(soap_text),
+        on_copy_to_clipboard=lambda soap_text: pyperclip.copy(soap_text),
+    )
+    return window
+
+
 def build_app(config=None, tk_root=None):
     config = config or Config.load(CONFIG_PATH)
     tk_root = tk_root or tk.Tk()
@@ -60,11 +72,13 @@ def build_app(config=None, tk_root=None):
     recorder = AudioRecorder()
     api_client = ApiClient(config.api_endpoint, config.api_timeout_seconds, config.api_key)
     injector = AvimarkInjector(title_marker=config.target_window_matcher)
+    history_store = HistoryStore()
     offline_queue = OfflineQueue(
         api_client=api_client,
         on_note_ready=lambda soap_text: run_on_main_thread(
             tk_root, lambda: show_flyout(tk_root, injector, soap_text)
         ),
+        history_store=history_store,
     )
 
     pipeline = Pipeline(
@@ -78,12 +92,16 @@ def build_app(config=None, tk_root=None):
             tk_root, lambda: show_flyout(tk_root, injector, message)
         ),
         offline_queue=offline_queue,
+        history_store=history_store,
     )
 
     tray_app = TrayApp(
         pipeline=pipeline,
         on_show_note=lambda soap_text: run_on_main_thread(
             tk_root, lambda: show_flyout(tk_root, injector, soap_text)
+        ),
+        on_show_history=lambda: run_on_main_thread(
+            tk_root, lambda: show_history(tk_root, injector, history_store)
         ),
     )
     pipeline.on_state_change = lambda state: tray_app.update_icon_for_state()

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from vetscribe.api_client import ApiClientError, SoapNote
+from vetscribe.history_store import HistoryStore
 from vetscribe.offline_queue import OfflineQueue, get_queue_dir
 
 
@@ -49,6 +50,32 @@ def test_process_once_processes_all_queued_files_in_order_and_removes_them(tmp_p
     assert on_note_ready.call_count == 2
     assert "SUBJECTIVE: s1" in on_note_ready.call_args_list[0][0][0]
     assert "SUBJECTIVE: s2" in on_note_ready.call_args_list[1][0][0]
+
+
+def test_process_once_saves_retried_note_to_history(tmp_path):
+    api_client = MagicMock()
+    api_client.generate_soap_note.return_value = SoapNote(
+        subjective="retried checkup",
+        objective="o",
+        assessment="a",
+        plan="p",
+        transcript="delayed transcript",
+    )
+    history_store = HistoryStore(history_dir=tmp_path / "history")
+    queue = OfflineQueue(
+        api_client=api_client,
+        on_note_ready=MagicMock(),
+        queue_dir=tmp_path / "queue",
+        history_store=history_store,
+    )
+    queue.enqueue(b"audio-1")
+
+    queue.process_once()
+
+    entries = history_store.list_entries()
+    assert len(entries) == 1
+    assert entries[0].subjective == "retried checkup"
+    assert entries[0].transcript == "delayed transcript"
 
 
 def test_process_once_stops_at_first_backend_failure_and_leaves_remaining_files_queued(tmp_path):

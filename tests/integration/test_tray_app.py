@@ -62,15 +62,26 @@ def test_on_hotkey_triggered_toggles_pipeline_and_refreshes_icon():
     assert center_pixel[:3] == (255, 0, 0)
 
 
-def test_menu_has_status_open_note_settings_separator_and_quit_items():
+def test_menu_has_status_open_note_history_settings_separator_and_quit_items():
     tray_app, _pipeline = make_tray_app(state=PipelineState.IDLE)
 
     labels = [str(item) for item in tray_app.icon.menu.items]
 
     assert labels[0].startswith("Status:")
     assert labels[1] == "Open Last SOAP Note"
-    assert labels[2] == "Settings"
-    assert labels[4] == "Quit"
+    assert labels[2] == "View History"
+    assert labels[3] == "Settings"
+    assert labels[5] == "Quit"
+
+
+def test_view_history_menu_item_invokes_on_show_history():
+    calls = []
+    tray_app, _pipeline = make_tray_app(state=PipelineState.IDLE)
+    tray_app.on_show_history = lambda: calls.append("history")
+
+    tray_app.show_history()
+
+    assert calls == ["history"]
 
 
 def test_status_menu_item_reflects_current_pipeline_state():

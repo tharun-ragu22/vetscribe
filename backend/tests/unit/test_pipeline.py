@@ -32,4 +32,5 @@ def test_process_transcribes_then_generates_note_from_transcript():
 
     assert transcriber.received_audio == b"RIFF....audio-bytes...."
     assert note_generator.received_transcript == "owner reports vomiting"
-    assert result is expected_note
+    assert result.note is expected_note
+    assert result.transcript == "owner reports vomiting"

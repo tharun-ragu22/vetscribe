@@ -1,5 +1,5 @@
 from vetscribe_backend.note_generation import NoteGenerator
-from vetscribe_backend.schemas import SoapNote
+from vetscribe_backend.schemas import SoapResult
 from vetscribe_backend.transcription import Transcriber
 
 
@@ -8,6 +8,7 @@ class SoapPipeline:
         self.transcriber = transcriber
         self.note_generator = note_generator
 
-    def process(self, audio_bytes: bytes) -> SoapNote:
+    def process(self, audio_bytes: bytes) -> SoapResult:
         transcript = self.transcriber.transcribe(audio_bytes)
-        return self.note_generator.generate(transcript)
+        note = self.note_generator.generate(transcript)
+        return SoapResult(note=note, transcript=transcript)

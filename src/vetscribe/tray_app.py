@@ -24,13 +24,16 @@ def build_icon_image(color: str) -> Image.Image:
 
 
 class TrayApp:
-    def __init__(self, pipeline, on_open_settings=None, on_show_note=None):
+    def __init__(
+        self, pipeline, on_open_settings=None, on_show_note=None, on_show_history=None
+    ):
         self.pipeline = pipeline
         self.hotkey_listener = None
         self.offline_queue = None
         self.tk_root = None
         self.on_open_settings = on_open_settings or (lambda: None)
         self.on_show_note = on_show_note or (lambda soap_text: None)
+        self.on_show_history = on_show_history or (lambda: None)
         self.icon = pystray.Icon(
             "vetscribe",
             icon=build_icon_image(STATE_COLORS[PipelineState.IDLE]),
@@ -46,6 +49,7 @@ class TrayApp:
                 lambda icon, item: self.open_last_note(),
                 enabled=lambda item: self.pipeline.last_soap_text is not None,
             ),
+            pystray.MenuItem("View History", lambda icon, item: self.show_history()),
             pystray.MenuItem("Settings", lambda icon, item: self.open_settings()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda icon, item: self.quit()),
@@ -86,6 +90,9 @@ class TrayApp:
     def open_last_note(self):
         if self.pipeline.last_soap_text:
             self.on_show_note(self.pipeline.last_soap_text)
+
+    def show_history(self):
+        self.on_show_history()
 
     def open_settings(self):
         self.on_open_settings()

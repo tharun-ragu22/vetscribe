@@ -16,6 +16,7 @@ class SoapNote:
     objective: str
     assessment: str
     plan: str
+    transcript: str = ""
 
 
 class ApiClient:
@@ -52,6 +53,7 @@ class ApiClient:
                 objective=data["objective"],
                 assessment=data["assessment"],
                 plan=data["plan"],
+                transcript=data.get("transcript", ""),
             )
         except KeyError as exc:
             raise ApiClientError(f"backend response missing field: {exc}") from exc

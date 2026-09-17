@@ -15,11 +15,19 @@ def get_queue_dir() -> Path:
 
 
 class OfflineQueue:
-    def __init__(self, api_client, on_note_ready, queue_dir=None, poll_interval_seconds=60):
+    def __init__(
+        self,
+        api_client,
+        on_note_ready,
+        queue_dir=None,
+        poll_interval_seconds=60,
+        history_store=None,
+    ):
         self.api_client = api_client
         self.on_note_ready = on_note_ready
         self.queue_dir = Path(queue_dir) if queue_dir else get_queue_dir()
         self.poll_interval_seconds = poll_interval_seconds
+        self.history_store = history_store
         self._stop_event = threading.Event()
         self._thread = None
 
@@ -53,9 +61,20 @@ class OfflineQueue:
                 break
             path.unlink()
             logger.info("queued recording %s processed successfully", path)
+            self._save_to_history(soap_note)
             self.on_note_ready(format_soap_text(soap_note))
             processed.append(path)
         return processed
+
+    def _save_to_history(self, soap_note):
+        # Best-effort, matching Pipeline: a history failure must not abort the
+        # retry (which would re-queue an already-succeeded note forever).
+        if self.history_store is None:
+            return
+        try:
+            self.history_store.save(soap_note)
+        except Exception:
+            logger.exception("failed to save retried SOAP note to history")
 
     def start(self):
         self._stop_event.clear()
