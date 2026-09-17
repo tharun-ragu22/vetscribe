@@ -28,28 +28,49 @@ class FlyoutWindow(tk.Toplevel):
             )
         )
 
-        self.text_widget = tk.Text(self)
-        self.text_widget.insert("1.0", soap_text)
-        self.text_widget.pack()
-
-        self.copy_and_inject_button = tk.Button(
-            self, text=ui_strings.BUTTON_COPY_AND_INJECT, command=on_copy_and_inject
-        )
-        self.copy_and_inject_button.pack()
-
-        self.copy_to_clipboard_button = tk.Button(
-            self, text=ui_strings.BUTTON_COPY_SOAP_NOTE, command=on_copy_to_clipboard
-        )
-        self.copy_to_clipboard_button.pack()
+        # Pack the controls at the bottom *first* so they always reserve their
+        # space; the note text then fills whatever's left. Otherwise the
+        # full-height Text widget pushes the buttons past the window's bottom
+        # edge and they're never seen (which hid "Open History" entirely).
+        controls = tk.Frame(self)
+        controls.pack(side="bottom", fill="x")
 
         # Only offered when there's a note to browse -- error-message flyouts
-        # pass no callback and omit the button entirely.
+        # pass no callback and omit the link entirely. Rendered as a text link
+        # rather than a chunky button so it reads as "take me to history".
         self.open_history_button = None
         if on_open_history is not None:
             self.open_history_button = tk.Button(
-                self, text=ui_strings.BUTTON_OPEN_HISTORY, command=on_open_history
+                controls,
+                text=ui_strings.BUTTON_OPEN_HISTORY,
+                command=on_open_history,
+                relief="flat",
+                borderwidth=0,
+                fg="blue",
+                cursor="hand2",
+                font=("TkDefaultFont", 9, "underline"),
             )
-            self.open_history_button.pack()
+            self.open_history_button.pack(side="bottom", pady=(4, 2))
+
+        button_row = tk.Frame(controls)
+        button_row.pack(side="bottom")
+        self.copy_and_inject_button = tk.Button(
+            button_row,
+            text=ui_strings.BUTTON_COPY_AND_INJECT,
+            command=on_copy_and_inject,
+        )
+        self.copy_and_inject_button.pack(side="left")
+
+        self.copy_to_clipboard_button = tk.Button(
+            button_row,
+            text=ui_strings.BUTTON_COPY_SOAP_NOTE,
+            command=on_copy_to_clipboard,
+        )
+        self.copy_to_clipboard_button.pack(side="left")
+
+        self.text_widget = tk.Text(self)
+        self.text_widget.insert("1.0", soap_text)
+        self.text_widget.pack(side="top", fill="both", expand=True)
 
         self.update()
 

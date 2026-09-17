@@ -71,6 +71,28 @@ def test_open_history_button_invokes_callback_when_provided(tk_root):
     assert calls == ["history"]
 
 
+def test_open_history_link_is_pinned_to_the_bottom_so_a_tall_note_cant_hide_it(
+    tk_root,
+):
+    # Regression: the note Text used to be packed first with no size limit, so a
+    # long note pushed the buttons (the last of which was Open History) below the
+    # window's bottom edge and out of sight. The controls must stay pinned to the
+    # bottom while the note fills the space above them.
+    flyout = FlyoutWindow(
+        master=tk_root,
+        soap_text="line\n" * 200,
+        on_copy_and_inject=lambda: None,
+        on_copy_to_clipboard=lambda: None,
+        on_open_history=lambda: None,
+    )
+
+    text_info = flyout.text_widget.pack_info()
+    assert text_info["side"] == "top"
+    assert str(text_info["expand"]) in ("1", "True")
+    assert text_info["fill"] == "both"
+    assert flyout.open_history_button.pack_info()["side"] == "bottom"
+
+
 def test_open_history_button_is_absent_when_no_callback_is_given(tk_root):
     # Error-message flyouts have no note to browse, so they omit the button.
     flyout = FlyoutWindow(
