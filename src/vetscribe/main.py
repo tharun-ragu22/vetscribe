@@ -63,6 +63,7 @@ def show_history(tk_root, injector, history_store):
         on_save_edit=lambda entry_id, soap_text, transcript: history_store.update(
             entry_id, soap_text=soap_text, transcript=transcript
         ),
+        on_delete=lambda entry_id: history_store.delete(entry_id),
     )
     return window
 

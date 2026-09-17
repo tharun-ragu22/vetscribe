@@ -39,6 +39,11 @@ def make_window(tk_root, entries, **overrides):
         on_copy_and_inject=lambda soap_text: None,
         on_copy_to_clipboard=lambda soap_text: None,
         on_save_edit=lambda entry_id, soap_text, transcript: None,
+        on_delete=lambda entry_id: None,
+        # Deletion is destructive, so the window guards it behind a confirmation.
+        # Default to "yes" in tests so the delete path runs without a real dialog;
+        # a test can override to simulate the vet cancelling.
+        confirm_delete=lambda entry: True,
         # Disable the timer-driven poll in tests; drive refresh() explicitly so
         # assertions are deterministic and no stray `after` jobs outlive the test.
         poll_interval_ms=None,
@@ -204,6 +209,76 @@ def test_editing_and_saving_sends_the_edited_text_to_the_save_callback(tk_root):
     window.save_button.invoke()
 
     assert saved == [("n1", "SUBJECTIVE: corrected note", "corrected transcript")]
+
+
+def test_delete_button_removes_selected_note_and_shows_a_neighbor(tk_root):
+    deleted = []
+    entries = [
+        make_entry(subjective="Newest", transcript="newest", entry_id="n1"),
+        make_entry(subjective="Older", transcript="older", entry_id="n2"),
+    ]
+
+    def on_delete(entry_id):
+        # The window re-reads the store after deleting, so mirror the removal in
+        # the source list that load_entries() reads from.
+        entries[:] = [e for e in entries if e.entry_id != entry_id]
+        deleted.append(entry_id)
+
+    window = make_window(tk_root, entries, on_delete=on_delete)
+    window.show_entry(0)  # the vet is on the newest note
+
+    window.delete_button.invoke()
+
+    assert deleted == ["n1"]
+    rows = window.listbox.get(0, "end")
+    assert len(rows) == 1
+    assert any("Older" in row for row in rows)
+    # A neighbor is selected so the detail pane isn't left showing a stale note.
+    assert "SUBJECTIVE: Older" in window.note_text.get("1.0", "end-1c")
+    assert "older" in window.transcript_text.get("1.0", "end-1c")
+
+
+def test_delete_of_the_last_note_clears_the_detail_panes(tk_root):
+    entries = [make_entry(subjective="Only note", transcript="only", entry_id="n1")]
+
+    def on_delete(entry_id):
+        entries[:] = [e for e in entries if e.entry_id != entry_id]
+
+    window = make_window(tk_root, entries, on_delete=on_delete)
+    window.show_entry(0)
+
+    window.delete_button.invoke()
+
+    assert window.listbox.get(0, "end") == ()
+    assert window.note_text.get("1.0", "end-1c") == ""
+    assert window.transcript_text.get("1.0", "end-1c") == ""
+
+
+def test_delete_does_nothing_when_the_vet_cancels_the_confirmation(tk_root):
+    deleted = []
+    entries = [make_entry(subjective="Only note", entry_id="n1")]
+    window = make_window(
+        tk_root,
+        entries,
+        on_delete=deleted.append,
+        confirm_delete=lambda entry: False,  # the vet clicks "No"
+    )
+    window.show_entry(0)
+
+    window.delete_button.invoke()
+
+    assert deleted == []
+    assert len(window.listbox.get(0, "end")) == 1
+    assert "SUBJECTIVE: Only note" in window.note_text.get("1.0", "end-1c")
+
+
+def test_delete_button_is_a_safe_noop_with_nothing_selected(tk_root):
+    deleted = []
+    window = make_window(tk_root, entries=[], on_delete=deleted.append)
+
+    window.delete_button.invoke()
+
+    assert deleted == []
 
 
 def test_auto_refresh_does_not_discard_an_in_progress_unsaved_edit(tk_root):

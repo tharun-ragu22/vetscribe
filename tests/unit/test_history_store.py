@@ -124,6 +124,34 @@ def test_update_of_unknown_entry_is_a_safe_noop(tmp_path):
     assert entries[0].subjective == "good entry"
 
 
+def test_delete_removes_note_and_its_transcript(tmp_path):
+    store = HistoryStore(history_dir=tmp_path)
+    keep = store.save(make_note(subjective="keep me"))
+    doomed = store.save(make_note(subjective="delete me", transcript="the transcript"))
+
+    result = store.delete(doomed.entry_id)
+
+    assert result is True
+    # The note is gone across a reopen, and its transcript went with it (both
+    # live in the one file that was removed).
+    reopened = HistoryStore(history_dir=tmp_path)
+    remaining = reopened.list_entries()
+    assert [e.entry_id for e in remaining] == [keep.entry_id]
+    assert not (tmp_path / f"{doomed.entry_id}.json").exists()
+
+
+def test_delete_of_unknown_entry_is_a_safe_noop(tmp_path):
+    store = HistoryStore(history_dir=tmp_path)
+    store.save(make_note(subjective="good entry"))
+
+    result = store.delete("note_does_not_exist")
+
+    assert result is False
+    entries = store.list_entries()
+    assert len(entries) == 1
+    assert entries[0].subjective == "good entry"
+
+
 def test_list_entries_skips_unreadable_history_data(tmp_path):
     # A garbage file in the history directory must not crash the listing --
     # a corrupt entry is worse than a missing one, but neither should take

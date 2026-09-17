@@ -93,6 +93,17 @@ class HistoryStore:
         logger.info("updated SOAP note in history: %s", entry_id)
         return self._entry_from_data(data, entry_id)
 
+    def delete(self, entry_id) -> bool:
+        # The note and its transcript share one file, so unlinking it removes
+        # both. Returns whether anything was actually deleted.
+        path = self._path_for(entry_id)
+        if not path.exists():
+            logger.warning("cannot delete unknown history entry: %s", entry_id)
+            return False
+        path.unlink()
+        logger.info("deleted SOAP note from history: %s", entry_id)
+        return True
+
     def list_entries(self):
         if not self.history_dir.exists():
             return []

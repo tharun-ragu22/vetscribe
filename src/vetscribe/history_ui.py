@@ -20,6 +20,8 @@ class HistoryWindow(tk.Toplevel):
         on_copy_and_inject,
         on_copy_to_clipboard,
         on_save_edit=None,
+        on_delete=None,
+        confirm_delete=None,
         poll_interval_ms=DEFAULT_POLL_INTERVAL_MS,
     ):
         super().__init__(master)
@@ -31,6 +33,8 @@ class HistoryWindow(tk.Toplevel):
         self.on_save_edit = on_save_edit or (
             lambda entry_id, soap_text, transcript: None
         )
+        self.on_delete = on_delete or (lambda entry_id: None)
+        self._confirm_delete = confirm_delete or self._default_confirm_delete
         self.entries = list(load_entries())
         self._selected_index = None
 
@@ -76,6 +80,12 @@ class HistoryWindow(tk.Toplevel):
             command=self._on_copy_to_clipboard_clicked,
         )
         self.copy_to_clipboard_button.pack(side="left")
+        self.delete_button = tk.Button(
+            button_frame,
+            text="Delete Note",
+            command=self._on_delete_clicked,
+        )
+        self.delete_button.pack(side="right")
 
         self._populate_listbox()
         # Show the newest note by default so the window is useful on open.
@@ -192,6 +202,36 @@ class HistoryWindow(tk.Toplevel):
         if updated is not None and self._selected_index is not None:
             self.entries[self._selected_index] = updated
         self._mark_clean()
+
+    def _default_confirm_delete(self, entry):
+        from tkinter import messagebox
+
+        return messagebox.askyesno(
+            "Delete note",
+            "Delete this SOAP note and its transcript? This cannot be undone.",
+            parent=self,
+        )
+
+    def _on_delete_clicked(self):
+        entry = self._selected_entry()
+        if entry is None:
+            return
+        if not self._confirm_delete(entry):
+            return
+        self.on_delete(entry.entry_id)
+        # Re-read the store rather than mutating locally, so what's shown always
+        # matches what's persisted. Keep the vet near where they were: select the
+        # note that slid into the deleted one's slot (or the new last note).
+        deleted_index = self._selected_index or 0
+        self.entries = list(self._load_entries())
+        self._populate_listbox()
+        if not self.entries:
+            self._selected_index = None
+            self._replace_text(self.note_text, "")
+            self._replace_text(self.transcript_text, "")
+            self._mark_clean()
+            return
+        self._select(min(deleted_index, len(self.entries) - 1))
 
     @staticmethod
     def _replace_text(widget, value):

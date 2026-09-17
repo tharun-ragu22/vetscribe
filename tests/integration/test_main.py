@@ -338,6 +338,12 @@ def test_view_history_opens_window_with_notes_from_both_save_paths(mocker, tmp_p
     assert edited.soap_text == "SUBJECTIVE: edited"
     assert edited.transcript == "edited transcript"
 
+    # The window's delete callback must remove the note (and its transcript) from
+    # the same shared store.
+    kwargs["on_delete"](target.entry_id)
+    remaining_ids = [e.entry_id for e in kwargs["load_entries"]()]
+    assert target.entry_id not in remaining_ids
+
 
 def test_build_app_offline_queue_on_note_ready_shows_flyout(mocker):
     mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
