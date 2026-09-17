@@ -16,6 +16,13 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          # Require EVERY pattern to match, not the default `some` (OR). With
+          # OR, the negation `!backend/**/*.md` matches every file that isn't a
+          # backend markdown file (i.e. almost everything), so the `backend`
+          # filter was always true and the eval job ran on every push. With
+          # `every`, a file counts only if it's under backend/ AND is not a
+          # backend markdown file -- i.e. a real backend code change.
+          predicate-quantifier: 'every'
           filters: |
             backend:
               - 'backend/**'
