@@ -1,4 +1,5 @@
 import tkinter
+import uuid
 
 import pytest
 
@@ -14,7 +15,7 @@ def tk_root():
     root.destroy()
 
 
-def make_entry(subjective="sub", transcript="the owner reports vomiting"):
+def make_entry(subjective="sub", transcript="the owner reports vomiting", entry_id=None):
     return HistoryEntry(
         timestamp="2026-09-17T10:30:00",
         subjective=subjective,
@@ -22,6 +23,9 @@ def make_entry(subjective="sub", transcript="the owner reports vomiting"):
         assessment="assess",
         plan="plan",
         transcript=transcript,
+        # Each entry needs a stable, unique id: the window preserves the vet's
+        # selection across auto-refresh by matching on it.
+        entry_id=entry_id or uuid.uuid4().hex,
     )
 
 
@@ -34,6 +38,7 @@ def make_window(tk_root, entries, **overrides):
         load_entries=lambda: list(entries),
         on_copy_and_inject=lambda soap_text: None,
         on_copy_to_clipboard=lambda soap_text: None,
+        on_save_edit=lambda entry_id, soap_text, transcript: None,
         # Disable the timer-driven poll in tests; drive refresh() explicitly so
         # assertions are deterministic and no stray `after` jobs outlive the test.
         poll_interval_ms=None,
@@ -177,3 +182,43 @@ def test_refresh_is_a_noop_when_nothing_changed(tk_root):
     # Selection is undisturbed and the list is unchanged.
     assert len(window.listbox.get(0, "end")) == 2
     assert "SUBJECTIVE: Older" in window.note_text.get("1.0", "end-1c")
+
+
+def test_editing_and_saving_sends_the_edited_text_to_the_save_callback(tk_root):
+    saved = []
+    entry = make_entry(subjective="Annual checkup", transcript="orig", entry_id="n1")
+    window = make_window(
+        tk_root,
+        [entry],
+        on_save_edit=lambda entry_id, soap_text, transcript: saved.append(
+            (entry_id, soap_text, transcript)
+        ),
+    )
+    window.show_entry(0)
+
+    # The vet edits both panes, then saves.
+    window.note_text.delete("1.0", "end")
+    window.note_text.insert("1.0", "SUBJECTIVE: corrected note")
+    window.transcript_text.delete("1.0", "end")
+    window.transcript_text.insert("1.0", "corrected transcript")
+    window.save_button.invoke()
+
+    assert saved == [("n1", "SUBJECTIVE: corrected note", "corrected transcript")]
+
+
+def test_auto_refresh_does_not_discard_an_in_progress_unsaved_edit(tk_root):
+    entries = [make_entry(subjective="Only note", transcript="orig", entry_id="n1")]
+    window = make_window(tk_root, entries)
+    window.show_entry(0)
+
+    # The vet starts editing but has not saved yet...
+    window.note_text.delete("1.0", "end")
+    window.note_text.insert("1.0", "half-typed edit")
+
+    # ...and a new note is recorded, triggering an auto-refresh.
+    entries.insert(0, make_entry(subjective="Just recorded", transcript="new", entry_id="n2"))
+    window.refresh()
+
+    # The new note shows up in the list, but the unsaved edit is NOT clobbered.
+    assert len(window.listbox.get(0, "end")) == 2
+    assert window.note_text.get("1.0", "end-1c") == "half-typed edit"

@@ -322,9 +322,21 @@ def test_view_history_opens_window_with_notes_from_both_save_paths(mocker, tmp_p
     assert kwargs["master"] is tk_root
     # The window is handed a callable that reads the shared store live, so it can
     # refresh; calling it must surface notes written via either save path.
-    subjectives = [entry.subjective for entry in kwargs["load_entries"]()]
+    entries = kwargs["load_entries"]()
+    subjectives = [entry.subjective for entry in entries]
     assert "from pipeline" in subjectives
     assert "from retry" in subjectives
+
+    # The window's save callback must persist an edit back into the same store.
+    target = next(e for e in entries if e.subjective == "from pipeline")
+    kwargs["on_save_edit"](
+        target.entry_id, soap_text="SUBJECTIVE: edited", transcript="edited transcript"
+    )
+    edited = next(
+        e for e in kwargs["load_entries"]() if e.entry_id == target.entry_id
+    )
+    assert edited.soap_text == "SUBJECTIVE: edited"
+    assert edited.transcript == "edited transcript"
 
 
 def test_build_app_offline_queue_on_note_ready_shows_flyout(mocker):

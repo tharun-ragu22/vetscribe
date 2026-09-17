@@ -60,6 +60,9 @@ def show_history(tk_root, injector, history_store):
         load_entries=history_store.list_entries,
         on_copy_and_inject=lambda soap_text: injector.inject(soap_text),
         on_copy_to_clipboard=lambda soap_text: pyperclip.copy(soap_text),
+        on_save_edit=lambda entry_id, soap_text, transcript: history_store.update(
+            entry_id, soap_text=soap_text, transcript=transcript
+        ),
     )
     return window
 

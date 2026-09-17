@@ -64,6 +64,46 @@ def test_list_entries_is_empty_when_no_notes_saved(tmp_path):
     assert store.list_entries() == []
 
 
+def test_saved_entry_has_a_stable_id_matching_the_listed_entry(tmp_path):
+    store = HistoryStore(history_dir=tmp_path)
+
+    saved = store.save(make_note(subjective="Annual checkup"))
+
+    listed = store.list_entries()[0]
+    assert saved.entry_id
+    assert listed.entry_id == saved.entry_id
+
+
+def test_update_persists_edited_note_and_transcript_across_reopen(tmp_path):
+    store = HistoryStore(history_dir=tmp_path)
+    saved = store.save(make_note(subjective="Annual checkup", transcript="dog is well"))
+
+    store.update(
+        saved.entry_id,
+        soap_text="SUBJECTIVE: corrected by the vet",
+        transcript="corrected transcript",
+    )
+
+    # A brand-new store instance == closing and reopening the app.
+    reopened = HistoryStore(history_dir=tmp_path)
+    entry = reopened.list_entries()[0]
+    assert entry.soap_text == "SUBJECTIVE: corrected by the vet"
+    assert entry.transcript == "corrected transcript"
+
+
+def test_update_of_unknown_entry_is_a_safe_noop(tmp_path):
+    store = HistoryStore(history_dir=tmp_path)
+    store.save(make_note(subjective="good entry"))
+
+    result = store.update("note_does_not_exist", soap_text="x", transcript="y")
+
+    assert result is None
+    # The real note is untouched and no stray file was created.
+    entries = store.list_entries()
+    assert len(entries) == 1
+    assert entries[0].subjective == "good entry"
+
+
 def test_list_entries_skips_unreadable_history_data(tmp_path):
     # A garbage file in the history directory must not crash the listing --
     # a corrupt entry is worse than a missing one, but neither should take
