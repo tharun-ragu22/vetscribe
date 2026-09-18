@@ -7,6 +7,7 @@ from vetscribe.api_client import ApiClient, SoapNote
 from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
+from vetscribe.icon_art import COLLAR_SAMPLE
 from vetscribe.main import build_app
 from vetscribe.pipeline import PipelineState
 
@@ -51,8 +52,9 @@ def test_tray_icon_turns_yellow_while_backend_call_is_in_flight():
     observed_color_mid_call = {}
 
     def fake_generate_soap_note(_audio_bytes):
-        observed_color_mid_call["value"] = tray_app.icon.icon.getpixel(
-            (tray_app.icon.icon.width // 2, tray_app.icon.icon.height // 2)
+        icon = tray_app.icon.icon
+        observed_color_mid_call["value"] = icon.getpixel(
+            (int(icon.width * COLLAR_SAMPLE[0]), int(icon.height * COLLAR_SAMPLE[1]))
         )
         raise AssertionError("stop before real network/injection work")
 
@@ -64,7 +66,9 @@ def test_tray_icon_turns_yellow_while_backend_call_is_in_flight():
     except AssertionError:
         pass
 
-    assert observed_color_mid_call["value"][:3] == (255, 255, 0)
+    # The processing state shows as a yellow collar on the dog logo.
+    r, g, b = observed_color_mid_call["value"][:3]
+    assert r > 200 and g > 200 and b < 60
 
 
 def test_build_app_wires_hotkey_listener_to_tray_app_trigger():

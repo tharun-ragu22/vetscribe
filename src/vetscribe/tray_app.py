@@ -1,9 +1,10 @@
 import logging
 
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from vetscribe import ui_strings
+from vetscribe.icon_art import render_logo
 from vetscribe.pipeline import PipelineState
 
 logger = logging.getLogger("vetscribe.tray_app")
@@ -18,10 +19,10 @@ STATE_COLORS = {
 
 
 def build_icon_image(color: str) -> Image.Image:
-    image = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    draw.ellipse((4, 4, ICON_SIZE - 4, ICON_SIZE - 4), fill=color)
-    return image
+    # The cute-dog logo with a state-coloured collar: the collar tells the vet
+    # at a glance whether the app is idle (green), recording (red) or
+    # processing (yellow).
+    return render_logo(ICON_SIZE, color)
 
 
 class TrayApp:

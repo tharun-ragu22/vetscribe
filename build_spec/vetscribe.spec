@@ -13,6 +13,7 @@ from pathlib import Path
 
 repo_root = Path(SPECPATH).parent
 src_dir = repo_root / "src"
+assets_dir = src_dir / "vetscribe" / "assets"
 
 block_cipher = None
 
@@ -20,7 +21,9 @@ a = Analysis(
     [str(src_dir / "vetscribe" / "main.py")],
     pathex=[str(src_dir)],
     binaries=[],
-    datas=[],
+    # Ship the logo so Tk can set window icons at runtime; it lands under
+    # sys._MEIPASS/vetscribe/assets/ (see paths.get_asset_path).
+    datas=[(str(assets_dir), "vetscribe/assets")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -49,6 +52,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(assets_dir / "vetscribe.ico"),
 )
 
 coll = COLLECT(
