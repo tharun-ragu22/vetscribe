@@ -2,12 +2,14 @@ import tkinter as tk
 from dataclasses import replace
 
 from vetscribe import ui_strings
+from vetscribe.window_icon import apply_window_icon
 
 
 class SettingsWindow(tk.Toplevel):
     def __init__(self, master, config, on_save):
         super().__init__(master)
         self.title(ui_strings.SETTINGS_WINDOW_TITLE)
+        apply_window_icon(self)
         self.config = config
         self.on_save = on_save
 

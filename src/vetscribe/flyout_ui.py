@@ -1,6 +1,7 @@
 import tkinter as tk
 
 from vetscribe import ui_strings
+from vetscribe.window_icon import apply_window_icon
 
 DEFAULT_WIDTH = 360
 DEFAULT_HEIGHT = 320
@@ -17,6 +18,7 @@ class FlyoutWindow(tk.Toplevel):
         on_open_history=None,
     ):
         super().__init__(master)
+        apply_window_icon(self)
         self.attributes("-topmost", True)
         self.geometry(
             self.bottom_right_geometry(

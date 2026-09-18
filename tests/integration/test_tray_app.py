@@ -1,18 +1,18 @@
 from unittest.mock import MagicMock
 
 from vetscribe import ui_strings
-from vetscribe.icon_art import COLLAR_SAMPLE
+from vetscribe.icon_art import STATUS_SAMPLE
 from vetscribe.pipeline import PipelineState
 from vetscribe.tray_app import TrayApp, build_icon_image
 
 
-def _collar_rgb(image):
-    # The logo's state colour lives in the dog's collar, not the (dog-face)
-    # centre, so sample the collar swatch the artwork exposes for this purpose.
+def _status_rgb(image):
+    # The tray icon's state colour lives in the status disc (where the notepad
+    # sits on the brand logo), not the dog-face centre, so sample the disc.
     # Downscaling the supersampled art nudges the swatch a few levels off the
     # exact fill, so callers compare with a tolerance rather than for equality.
     px = image.getpixel(
-        (int(image.width * COLLAR_SAMPLE[0]), int(image.height * COLLAR_SAMPLE[1]))
+        (int(image.width * STATUS_SAMPLE[0]), int(image.height * STATUS_SAMPLE[1]))
     )
     return px[:3]
 
@@ -24,7 +24,7 @@ def _is_close(rgb, expected, tol=25):
 def test_build_icon_image_returns_image_of_requested_color():
     image = build_icon_image("green")
 
-    assert _is_close(_collar_rgb(image), (0, 128, 0))
+    assert _is_close(_status_rgb(image), (0, 128, 0))
 
 
 def make_tray_app(**overrides):
@@ -38,7 +38,7 @@ def test_update_icon_for_state_sets_icon_matching_recording_state():
 
     tray_app.update_icon_for_state()
 
-    assert _is_close(_collar_rgb(tray_app.icon.icon), (255, 0, 0))
+    assert _is_close(_status_rgb(tray_app.icon.icon), (255, 0, 0))
 
 
 def test_update_icon_for_state_refreshes_native_menu():
@@ -69,7 +69,7 @@ def test_on_hotkey_triggered_toggles_pipeline_and_refreshes_icon():
     tray_app.on_hotkey_triggered()
 
     pipeline.toggle_recording.assert_called_once()
-    assert _is_close(_collar_rgb(tray_app.icon.icon), (255, 0, 0))
+    assert _is_close(_status_rgb(tray_app.icon.icon), (255, 0, 0))
 
 
 def test_menu_has_status_open_note_history_settings_separator_and_quit_items():

@@ -2,6 +2,7 @@ import logging
 import tkinter as tk
 
 from vetscribe import ui_strings
+from vetscribe.window_icon import apply_window_icon
 
 logger = logging.getLogger("vetscribe.history_ui")
 
@@ -28,6 +29,7 @@ class HistoryWindow(tk.Toplevel):
     ):
         super().__init__(master)
         self.title(ui_strings.HISTORY_WINDOW_TITLE)
+        apply_window_icon(self)
         self.geometry(f"{DEFAULT_WIDTH}x{DEFAULT_HEIGHT}")
         self._load_entries = load_entries
         self.on_copy_and_inject = on_copy_and_inject

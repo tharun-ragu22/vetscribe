@@ -1,5 +1,4 @@
 import logging
-import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -20,29 +19,11 @@ from vetscribe.offline_queue import OfflineQueue
 from vetscribe.pipeline import Pipeline
 from vetscribe.settings_ui import SettingsWindow
 from vetscribe.tray_app import TrayApp
+from vetscribe.window_icon import apply_window_icon
 
 logger = logging.getLogger("vetscribe.main")
 
 CONFIG_PATH = Path.home() / ".vetscribe" / "config.json"
-
-
-def apply_window_icon(tk_root):
-    # Give the flyout/settings/history windows (and their taskbar buttons) the
-    # dog logo. Toplevels created with this root as master inherit it via the
-    # default=True flag. On Windows the .ico carries all sizes; elsewhere Tk
-    # only understands a PhotoImage, so fall back to the .png. Best-effort:
-    # a missing/undecodable asset must never stop the app from launching.
-    from vetscribe.paths import get_asset_path
-
-    try:
-        if sys.platform == "win32":
-            tk_root.iconbitmap(default=str(get_asset_path("vetscribe.ico")))
-        else:
-            icon = tk.PhotoImage(master=tk_root, file=str(get_asset_path("vetscribe.png")))
-            tk_root._vetscribe_icon = icon  # keep a ref so Tk doesn't GC it
-            tk_root.iconphoto(True, icon)
-    except Exception:
-        logger.warning("Could not set window icon", exc_info=True)
 
 
 def run_on_main_thread(tk_root, fn):
