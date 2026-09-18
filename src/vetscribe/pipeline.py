@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from vetscribe.api_client import ApiClientError
+from vetscribe.paths import get_appdata_base_dir
 
 logger = logging.getLogger("vetscribe.pipeline")
 
@@ -42,8 +43,10 @@ class Pipeline:
         self.injector = injector
         self.on_flyout_needed = on_flyout_needed
         self.on_error = on_error or (lambda message: None)
+        # Share one data root with history/ and queue/ (%APPDATA%\VetScribe on
+        # Windows, ~/.vetscribe elsewhere) so all VetScribe data lives together.
         self.recordings_dir = Path(recordings_dir) if recordings_dir else (
-            Path.home() / ".vetscribe" / "recordings"
+            get_appdata_base_dir() / "recordings"
         )
         self.offline_queue = offline_queue
         self.on_state_change = on_state_change or (lambda state: None)
