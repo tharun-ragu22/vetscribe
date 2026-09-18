@@ -38,7 +38,10 @@ def run_on_main_thread(tk_root, fn):
 
 def show_flyout(tk_root, injector, soap_text, on_open_history=None):
     def on_copy_and_inject():
-        injector.inject(soap_text)
+        # The flyout is a clicked window, so AVImark isn't foreground; actively
+        # raise it and paste rather than using the strict inject() guard (which
+        # is for the automatic post-hotkey path where AVImark is still focused).
+        injector.focus_and_inject(soap_text)
         flyout.destroy()
 
     def on_copy_to_clipboard():
@@ -67,7 +70,7 @@ def show_history(tk_root, injector, history_store):
     window = HistoryWindow(
         master=tk_root,
         load_entries=history_store.list_entries,
-        on_copy_and_inject=lambda soap_text: injector.inject(soap_text),
+        on_copy_and_inject=lambda soap_text: injector.focus_and_inject(soap_text),
         on_copy_to_clipboard=lambda soap_text: pyperclip.copy(soap_text),
         on_save_edit=lambda entry_id, soap_text, transcript: history_store.update(
             entry_id, soap_text=soap_text, transcript=transcript

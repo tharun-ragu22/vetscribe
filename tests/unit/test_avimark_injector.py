@@ -72,3 +72,116 @@ def test_inject_copies_and_sends_ctrl_v_when_avimark_foreground(mocker):
     assert result is True
     mock_copy.assert_called_once_with("SOAP TEXT")
     assert mock_win32api.keybd_event.call_count == 4
+
+
+def _fake_enum_windows(windows):
+    """side_effect for win32gui.EnumWindows that feeds it the given hwnds."""
+
+    def enum(callback, results):
+        for hwnd in windows:
+            callback(hwnd, results)
+
+    return enum
+
+
+def test_find_avimark_window_returns_matching_visible_window(mocker):
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mock_win32gui.EnumWindows.side_effect = _fake_enum_windows([111, 222])
+    mock_win32gui.IsWindowVisible.return_value = True
+    mock_win32gui.GetWindowText.side_effect = (
+        lambda hwnd: "AVImark - [Patient]" if hwnd == 111 else "Notepad"
+    )
+
+    injector = AvimarkInjector()
+
+    assert injector.find_avimark_window() == 111
+
+
+def test_find_avimark_window_ignores_invisible_windows(mocker):
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mock_win32gui.EnumWindows.side_effect = _fake_enum_windows([111])
+    mock_win32gui.IsWindowVisible.return_value = False
+    mock_win32gui.GetWindowText.return_value = "AVImark - [Patient]"
+
+    injector = AvimarkInjector()
+
+    assert injector.find_avimark_window() is None
+
+
+def test_focus_and_inject_raises_avimark_then_copies_and_pastes(mocker):
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mock_win32api = mocker.patch("vetscribe.avimark_injector.win32api")
+    mocker.patch("vetscribe.avimark_injector.win32con")
+    mock_copy = mocker.patch.object(AvimarkInjector, "copy_to_clipboard")
+
+    mock_win32gui.EnumWindows.side_effect = _fake_enum_windows([111])
+    mock_win32gui.IsWindowVisible.return_value = True
+    mock_win32gui.GetWindowText.return_value = "AVImark - [Patient: Max]"
+    mock_win32gui.IsIconic.return_value = False
+    # After SetForegroundWindow, AVImark is the foreground window.
+    mock_win32gui.GetForegroundWindow.return_value = 111
+
+    injector = AvimarkInjector()
+    result = injector.focus_and_inject("SOAP TEXT")
+
+    assert result is True
+    mock_win32gui.SetForegroundWindow.assert_called_once_with(111)
+    mock_copy.assert_called_once_with("SOAP TEXT")
+    assert mock_win32api.keybd_event.call_count == 4
+
+
+def test_focus_and_inject_restores_a_minimized_avimark_window(mocker):
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mocker.patch("vetscribe.avimark_injector.win32api")
+    mock_win32con = mocker.patch("vetscribe.avimark_injector.win32con")
+    mocker.patch.object(AvimarkInjector, "copy_to_clipboard")
+
+    mock_win32gui.EnumWindows.side_effect = _fake_enum_windows([111])
+    mock_win32gui.IsWindowVisible.return_value = True
+    mock_win32gui.GetWindowText.return_value = "AVImark"
+    mock_win32gui.IsIconic.return_value = True
+    mock_win32gui.GetForegroundWindow.return_value = 111
+
+    injector = AvimarkInjector()
+    injector.focus_and_inject("SOAP TEXT")
+
+    mock_win32gui.ShowWindow.assert_called_once_with(111, mock_win32con.SW_RESTORE)
+
+
+def test_focus_and_inject_returns_false_when_no_avimark_window(mocker):
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mock_copy = mocker.patch.object(AvimarkInjector, "copy_to_clipboard")
+
+    mock_win32gui.EnumWindows.side_effect = _fake_enum_windows([222])
+    mock_win32gui.IsWindowVisible.return_value = True
+    mock_win32gui.GetWindowText.return_value = "Notepad"
+
+    injector = AvimarkInjector()
+    result = injector.focus_and_inject("SOAP TEXT")
+
+    assert result is False
+    mock_copy.assert_not_called()
+    mock_win32gui.SetForegroundWindow.assert_not_called()
+
+
+def test_focus_and_inject_does_not_paste_if_focus_does_not_take(mocker):
+    # SetForegroundWindow can be refused by Windows; never paste unless AVImark
+    # genuinely ended up in the foreground, so the note can't hit another app.
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mocker.patch("vetscribe.avimark_injector.win32con")
+    mock_copy = mocker.patch.object(AvimarkInjector, "copy_to_clipboard")
+
+    mock_win32gui.EnumWindows.side_effect = _fake_enum_windows([111])
+    mock_win32gui.IsWindowVisible.return_value = True
+    mock_win32gui.GetWindowText.side_effect = (
+        lambda hwnd: "AVImark" if hwnd == 111 else "Some Other App"
+    )
+    mock_win32gui.IsIconic.return_value = False
+    # Focus didn't take: a different window is still foreground.
+    mock_win32gui.GetForegroundWindow.return_value = 999
+
+    injector = AvimarkInjector()
+    result = injector.focus_and_inject("SOAP TEXT")
+
+    assert result is False
+    mock_copy.assert_not_called()
