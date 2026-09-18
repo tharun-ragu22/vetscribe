@@ -121,7 +121,52 @@ def test_flyout_window_is_topmost(tk_root):
 
 def test_bottom_right_geometry_places_window_in_bottom_right_corner_with_margin():
     geometry = FlyoutWindow.bottom_right_geometry(
-        screen_width=1920, screen_height=1080, width=400, height=300, margin=20
+        work_left=0,
+        work_top=0,
+        work_right=1920,
+        work_bottom=1080,
+        width=400,
+        height=300,
+        margin=20,
     )
 
     assert geometry == "400x300+1500+760"
+
+
+def test_bottom_right_geometry_keeps_bottom_above_the_taskbar():
+    # With a 48px taskbar the usable bottom is 1032, not 1080. The window's
+    # bottom edge (y + height) must land at 1032 - margin so the buttons stay
+    # visible instead of being clipped behind the taskbar.
+    margin = 20
+    height = 300
+    work_bottom = 1080 - 48
+
+    geometry = FlyoutWindow.bottom_right_geometry(
+        work_left=0,
+        work_top=0,
+        work_right=1920,
+        work_bottom=work_bottom,
+        width=400,
+        height=height,
+        margin=margin,
+    )
+
+    y = int(geometry.split("+")[2])
+    assert y + height == work_bottom - margin
+
+
+def test_bottom_right_geometry_keeps_bottom_visible_for_a_window_taller_than_screen():
+    # A note taller than the usable area must still show its bottom edge (the
+    # controls); the top is allowed to run off instead.
+    geometry = FlyoutWindow.bottom_right_geometry(
+        work_left=0,
+        work_top=0,
+        work_right=1920,
+        work_bottom=800,
+        width=400,
+        height=1000,
+        margin=20,
+    )
+
+    y = int(geometry.split("+")[2])
+    assert y + 1000 == 800 - 20
