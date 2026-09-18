@@ -38,6 +38,11 @@ def run_on_main_thread(tk_root, fn):
 
 
 def show_flyout(tk_root, injector, soap_text, on_open_history=None):
+    # Capture whichever AVImark chart is in front now, before the flyout steals
+    # focus, so "Copy & Inject" pastes back into that same chart even if the vet
+    # has several AVImark windows open.
+    injector.remember_active_window()
+
     def on_copy_and_inject():
         # The flyout is a clicked window, so AVImark isn't foreground; actively
         # raise it and paste rather than using the strict inject() guard (which
@@ -68,6 +73,7 @@ def show_flyout(tk_root, injector, soap_text, on_open_history=None):
 
 
 def show_history(tk_root, injector, history_store):
+    injector.remember_active_window()
     window = HistoryWindow(
         master=tk_root,
         load_entries=history_store.list_entries,
