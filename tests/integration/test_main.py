@@ -8,8 +8,34 @@ from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
 from vetscribe.icon_art import STATUS_SAMPLE
-from vetscribe.main import build_app
+from vetscribe.main import build_app, follow_active_avimark
 from vetscribe.pipeline import PipelineState
+
+
+def test_follow_active_avimark_tracks_until_window_closes():
+    tk_root = MagicMock()
+    injector = MagicMock()
+    window = MagicMock()
+    # winfo_exists: still open on the first tick, gone on the second.
+    window.winfo_exists.side_effect = [True, False]
+
+    follow_active_avimark(tk_root, injector, window, interval_ms=10)
+
+    # The loop arms itself on the Tk event loop rather than running inline.
+    tk_root.after.assert_called_once()
+    injector.track_active_window.assert_not_called()
+
+    # Fire the first scheduled tick: window is open, so re-capture and re-arm.
+    _, first_tick = tk_root.after.call_args[0]
+    first_tick()
+    injector.track_active_window.assert_called_once()
+    assert tk_root.after.call_count == 2
+
+    # Fire the second tick: window is gone, so stop -- no further tracking.
+    _, second_tick = tk_root.after.call_args[0]
+    second_tick()
+    injector.track_active_window.assert_called_once()
+    assert tk_root.after.call_count == 2
 
 
 def test_build_app_wires_pipeline_dependencies_from_config():

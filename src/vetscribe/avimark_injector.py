@@ -71,12 +71,12 @@ class AvimarkInjector:
         """Record the currently-foreground AVImark window as the paste target.
 
         Called just before a flyout / history window is shown, while the vet's
-        AVImark chart is still in front. Capturing the exact window here is what
-        lets ``focus_and_inject`` put the note back into the *same* chart even
-        when several AVImark windows are open. If the foreground isn't an
-        AVImark window (e.g. History was opened from the tray menu), the target
-        is cleared and injection falls back to auto-detection. Best-effort: a
-        failing Win32 call must never break showing the flyout.
+        AVImark chart is still in front, to seed the target for the common case
+        where they inject without navigating away. ``track_active_window`` then
+        keeps it current. If the foreground isn't an AVImark window (e.g.
+        History was opened from the tray menu), the target is cleared and
+        injection falls back to auto-detection. Best-effort: a failing Win32
+        call must never break showing the flyout.
         """
         try:
             hwnd = win32gui.GetForegroundWindow()
@@ -89,6 +89,23 @@ class AvimarkInjector:
             logger.debug("remembered active AVImark window %s (%r)", hwnd, title)
         else:
             self.target_hwnd = None
+
+    def track_active_window(self):
+        """Follow the vet to whichever AVImark chart they switch to.
+
+        Polled on a timer while a flyout / history window is open. If an AVImark
+        window is currently in front, it becomes the paste target; otherwise
+        (our own flyout is in front, another app, etc.) the last AVImark target
+        is left untouched -- so Copy & Inject lands in the chart the vet was
+        *most recently* in, following their latest navigation. Best-effort.
+        """
+        try:
+            hwnd = win32gui.GetForegroundWindow()
+            title = win32gui.GetWindowText(hwnd)
+        except Exception:
+            return
+        if self.title_marker.lower() in title.lower():
+            self.target_hwnd = hwnd
 
     def _remembered_target(self):
         """The remembered AVImark window if it's still open and still AVImark."""

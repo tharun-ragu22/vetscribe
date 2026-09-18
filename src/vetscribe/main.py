@@ -37,10 +37,27 @@ def run_on_main_thread(tk_root, fn):
         tk_root.after(0, fn)
 
 
+FOLLOW_ACTIVE_INTERVAL_MS = 250
+
+
+def follow_active_avimark(tk_root, injector, window, interval_ms=FOLLOW_ACTIVE_INTERVAL_MS):
+    # While a flyout / history window is open, keep re-capturing whichever
+    # AVImark chart the vet is in, so "Copy & Inject" follows their latest
+    # navigation and pastes into the chart they most recently switched to --
+    # even with several AVImark windows open. Re-arms itself on the Tk event
+    # loop and stops on its own once the window is gone.
+    def track():
+        if not window.winfo_exists():
+            return
+        injector.track_active_window()
+        tk_root.after(interval_ms, track)
+
+    tk_root.after(interval_ms, track)
+
+
 def show_flyout(tk_root, injector, soap_text, on_open_history=None):
-    # Capture whichever AVImark chart is in front now, before the flyout steals
-    # focus, so "Copy & Inject" pastes back into that same chart even if the vet
-    # has several AVImark windows open.
+    # Seed the target with the chart in front right now (before the flyout takes
+    # focus); follow_active_avimark then keeps it current as the vet navigates.
     injector.remember_active_window()
 
     def on_copy_and_inject():
@@ -69,6 +86,7 @@ def show_flyout(tk_root, injector, soap_text, on_open_history=None):
         on_copy_to_clipboard=on_copy_to_clipboard,
         on_open_history=open_history,
     )
+    follow_active_avimark(tk_root, injector, flyout)
     return flyout
 
 
@@ -84,6 +102,7 @@ def show_history(tk_root, injector, history_store):
         ),
         on_delete=lambda entry_id: history_store.delete(entry_id),
     )
+    follow_active_avimark(tk_root, injector, window)
     return window
 
 

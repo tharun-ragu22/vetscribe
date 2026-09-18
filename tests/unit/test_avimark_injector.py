@@ -210,6 +210,34 @@ def test_remember_active_window_clears_target_when_foreground_not_avimark(mocker
     assert injector.target_hwnd is None
 
 
+def test_track_active_window_updates_target_to_foreground_avimark(mocker):
+    # The vet switched to a different AVImark chart while the flyout was open;
+    # tracking follows them to it.
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mock_win32gui.GetForegroundWindow.return_value = 222
+    mock_win32gui.GetWindowText.return_value = "AVImark - [Patient: Bella]"
+
+    injector = AvimarkInjector()
+    injector.target_hwnd = 111
+    injector.track_active_window()
+
+    assert injector.target_hwnd == 222
+
+
+def test_track_active_window_keeps_last_target_when_foreground_not_avimark(mocker):
+    # Our own flyout (or any non-AVImark window) is in front: don't drop the
+    # chart the vet was last in, so Copy & Inject still has a target.
+    mock_win32gui = mocker.patch("vetscribe.avimark_injector.win32gui")
+    mock_win32gui.GetForegroundWindow.return_value = 999
+    mock_win32gui.GetWindowText.return_value = "VetScribe note"
+
+    injector = AvimarkInjector()
+    injector.target_hwnd = 111
+    injector.track_active_window()
+
+    assert injector.target_hwnd == 111
+
+
 def test_focus_and_inject_pastes_into_remembered_chart_among_many(mocker):
     # Two AVImark charts are open (111 and 222). The vet was in 222 when the
     # flyout appeared, so we must paste there -- not into whichever window
