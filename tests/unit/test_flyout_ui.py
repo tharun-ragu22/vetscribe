@@ -3,7 +3,7 @@ import tkinter
 import pytest
 
 from vetscribe import ui_strings
-from vetscribe.flyout_ui import FlyoutWindow
+from vetscribe.flyout_ui import DEFAULT_HEIGHT, DEFAULT_WIDTH, FlyoutWindow
 
 
 @pytest.fixture
@@ -119,54 +119,27 @@ def test_flyout_window_is_topmost(tk_root):
     assert flyout.attributes("-topmost") == 1
 
 
+def test_long_note_does_not_grow_the_window_past_the_requested_size(tk_root):
+    # Regression: the Text widget's default 24-line height made the toplevel
+    # grow taller than DEFAULT_HEIGHT, so its bottom edge (the buttons) landed
+    # below the screen and the flyout looked cut off. The window must keep the
+    # requested size regardless of note length; the note scrolls inside it.
+    flyout = FlyoutWindow(
+        master=tk_root,
+        soap_text="line\n" * 500,
+        on_copy_and_inject=lambda: None,
+        on_copy_to_clipboard=lambda: None,
+        on_open_history=lambda: None,
+    )
+    flyout.update_idletasks()
+
+    size = flyout.geometry().split("+")[0]
+    assert size == f"{DEFAULT_WIDTH}x{DEFAULT_HEIGHT}"
+
+
 def test_bottom_right_geometry_places_window_in_bottom_right_corner_with_margin():
     geometry = FlyoutWindow.bottom_right_geometry(
-        work_left=0,
-        work_top=0,
-        work_right=1920,
-        work_bottom=1080,
-        width=400,
-        height=300,
-        margin=20,
+        screen_width=1920, screen_height=1080, width=400, height=300, margin=20
     )
 
     assert geometry == "400x300+1500+760"
-
-
-def test_bottom_right_geometry_keeps_bottom_above_the_taskbar():
-    # With a 48px taskbar the usable bottom is 1032, not 1080. The window's
-    # bottom edge (y + height) must land at 1032 - margin so the buttons stay
-    # visible instead of being clipped behind the taskbar.
-    margin = 20
-    height = 300
-    work_bottom = 1080 - 48
-
-    geometry = FlyoutWindow.bottom_right_geometry(
-        work_left=0,
-        work_top=0,
-        work_right=1920,
-        work_bottom=work_bottom,
-        width=400,
-        height=height,
-        margin=margin,
-    )
-
-    y = int(geometry.split("+")[2])
-    assert y + height == work_bottom - margin
-
-
-def test_bottom_right_geometry_keeps_bottom_visible_for_a_window_taller_than_screen():
-    # A note taller than the usable area must still show its bottom edge (the
-    # controls); the top is allowed to run off instead.
-    geometry = FlyoutWindow.bottom_right_geometry(
-        work_left=0,
-        work_top=0,
-        work_right=1920,
-        work_bottom=800,
-        width=400,
-        height=1000,
-        margin=20,
-    )
-
-    y = int(geometry.split("+")[2])
-    assert y + 1000 == 800 - 20

@@ -18,18 +18,6 @@ class FlyoutWindow(tk.Toplevel):
     ):
         super().__init__(master)
         self.attributes("-topmost", True)
-        work_left, work_top, work_right, work_bottom = self.screen_work_area()
-        self.geometry(
-            self.bottom_right_geometry(
-                work_left=work_left,
-                work_top=work_top,
-                work_right=work_right,
-                work_bottom=work_bottom,
-                width=DEFAULT_WIDTH,
-                height=DEFAULT_HEIGHT,
-                margin=DEFAULT_MARGIN,
-            )
-        )
 
         # Pack the controls at the bottom *first* so they always reserve their
         # space; the note text then fills whatever's left. Otherwise the
@@ -66,44 +54,31 @@ class FlyoutWindow(tk.Toplevel):
             )
             self.open_history_button.pack(side="left")
 
-        self.text_widget = tk.Text(self)
+        # height=1 keeps the Text from requesting its default 24-line size; it
+        # fills the window via expand instead. Without this the toplevel grows
+        # to fit the Text's natural height and the geometry below is ignored.
+        self.text_widget = tk.Text(self, height=1)
         self.text_widget.insert("1.0", soap_text)
         self.text_widget.pack(side="top", fill="both", expand=True)
 
+        # Size and position the window *after* its widgets exist so the geometry
+        # request is authoritative. Doing this before packing let the content's
+        # natural size win, which pushed the bottom edge (the buttons) off the
+        # screen -- the flyout appeared cut off and had to be dragged up.
+        self.update_idletasks()
+        self.geometry(
+            self.bottom_right_geometry(
+                screen_width=self.winfo_screenwidth(),
+                screen_height=self.winfo_screenheight(),
+                width=DEFAULT_WIDTH,
+                height=DEFAULT_HEIGHT,
+                margin=DEFAULT_MARGIN,
+            )
+        )
         self.update()
 
-    def screen_work_area(self):
-        """Usable screen rectangle (left, top, right, bottom) as pixel coords.
-
-        On Windows this excludes the taskbar via SPI_GETWORKAREA -- otherwise
-        the flyout, anchored to the raw screen height, drops its bottom edge
-        (and the buttons) behind the taskbar where they're clipped. Anywhere the
-        query is unavailable (Linux dev/CI, headless), fall back to the full
-        screen so behaviour is unchanged there.
-        """
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            SPI_GETWORKAREA = 0x0030
-            rect = wintypes.RECT()
-            if ctypes.windll.user32.SystemParametersInfoW(
-                SPI_GETWORKAREA, 0, ctypes.byref(rect), 0
-            ):
-                return rect.left, rect.top, rect.right, rect.bottom
-        except (AttributeError, OSError):
-            pass
-        return 0, 0, self.winfo_screenwidth(), self.winfo_screenheight()
-
     @staticmethod
-    def bottom_right_geometry(
-        work_left, work_top, work_right, work_bottom, width, height, margin
-    ):
-        x = work_right - width - margin
-        y = work_bottom - height - margin
-        # Keep the window on-screen horizontally if it's wider than the work
-        # area. Vertically we deliberately don't clamp to the top edge: if the
-        # note is taller than the usable area the bottom (the controls) must
-        # stay visible, so we let the top run off instead.
-        x = max(work_left, x)
+    def bottom_right_geometry(screen_width, screen_height, width, height, margin):
+        x = screen_width - width - margin
+        y = screen_height - height - margin
         return f"{width}x{height}+{x}+{y}"
