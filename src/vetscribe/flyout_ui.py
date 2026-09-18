@@ -71,39 +71,82 @@ class FlyoutWindow(tk.Toplevel):
 
         # The pre-computed geometry above is only a first guess: the real window
         # manager decorates and may resize the window, so its actual rendered
-        # height can exceed DEFAULT_HEIGHT and push the bottom edge (the buttons)
-        # off the screen. Re-anchor using the window's *measured* size, and do it
-        # again on the event loop once the WM has finished mapping it, so the
-        # bottom is always visible without the user having to drag it up.
+        # size can push the bottom edge (the buttons) past the usable screen.
+        # Re-anchor against the *work area* (screen minus taskbar) using the
+        # window's *measured* size, and do it again on the event loop once the WM
+        # has finished mapping it, so the bottom is always visible without the
+        # user having to drag it up.
         self._anchor_bottom_right()
         self.after(0, self._anchor_bottom_right)
 
     def _anchor_bottom_right(self):
         self.update_idletasks()
+        left, top, right, bottom = self.screen_work_area()
         x, y = self.fit_bottom_right(
-            screen_width=self.winfo_screenwidth(),
-            screen_height=self.winfo_screenheight(),
+            work_left=left,
+            work_top=top,
+            work_right=right,
+            work_bottom=bottom,
             width=self.winfo_width(),
             height=self.winfo_height(),
             margin=DEFAULT_MARGIN,
         )
         self.geometry(f"+{x}+{y}")
 
-    @staticmethod
-    def fit_bottom_right(screen_width, screen_height, width, height, margin):
-        """Bottom-right position that keeps the *whole* window on-screen.
+    def screen_work_area(self):
+        """Usable screen rect ``(left, top, right, bottom)`` in Tk coordinates.
 
-        Anchors to the bottom-right corner but never lets the left/top edge go
-        past ``margin``, so a window taller or wider than the screen still shows
-        its bottom-right (where the buttons live) rather than running off-edge.
+        Momentarily maximizes an invisible probe window: the window manager
+        sizes a maximized window to the work area (excluding the taskbar,
+        whichever edge it's on), and reading it back stays in Tk's own
+        coordinate space -- so it's correct even under Windows DPI scaling, where
+        physical ``SPI_GETWORKAREA`` pixels wouldn't line up with Tk's geometry.
+        Falls back to the full screen where maximize isn't supported (e.g. the
+        X11/headless test environment), leaving behaviour there unchanged.
         """
-        x = max(margin, screen_width - width - margin)
-        y = max(margin, screen_height - height - margin)
+        probe = None
+        try:
+            probe = tk.Toplevel(self)
+            probe.attributes("-alpha", 0.0)
+            probe.state("zoomed")
+            probe.update_idletasks()
+            left = probe.winfo_rootx()
+            top = probe.winfo_rooty()
+            right = left + probe.winfo_width()
+            bottom = top + probe.winfo_height()
+            if right > left and bottom > top:
+                return left, top, right, bottom
+        except tk.TclError:
+            pass
+        finally:
+            if probe is not None:
+                probe.destroy()
+        return 0, 0, self.winfo_screenwidth(), self.winfo_screenheight()
+
+    @staticmethod
+    def fit_bottom_right(
+        work_left, work_top, work_right, work_bottom, width, height, margin
+    ):
+        """Bottom-right position that keeps the *whole* window in the work area.
+
+        Anchors to the bottom-right corner of the usable area but never lets the
+        left/top edge cross ``margin`` past the work-area edge, so a window
+        taller or wider than the screen still shows its bottom-right (where the
+        buttons live) rather than running off-edge.
+        """
+        x = max(work_left + margin, work_right - width - margin)
+        y = max(work_top + margin, work_bottom - height - margin)
         return x, y
 
     @staticmethod
     def bottom_right_geometry(screen_width, screen_height, width, height, margin):
         x, y = FlyoutWindow.fit_bottom_right(
-            screen_width, screen_height, width, height, margin
+            work_left=0,
+            work_top=0,
+            work_right=screen_width,
+            work_bottom=screen_height,
+            width=width,
+            height=height,
+            margin=margin,
         )
         return f"{width}x{height}+{x}+{y}"

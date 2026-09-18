@@ -129,10 +129,34 @@ def test_bottom_right_geometry_places_window_in_bottom_right_corner_with_margin(
 
 def test_fit_bottom_right_anchors_to_the_bottom_right_corner():
     x, y = FlyoutWindow.fit_bottom_right(
-        screen_width=1920, screen_height=1080, width=400, height=300, margin=20
+        work_left=0,
+        work_top=0,
+        work_right=1920,
+        work_bottom=1080,
+        width=400,
+        height=300,
+        margin=20,
     )
 
     assert (x, y) == (1500, 760)
+
+
+def test_fit_bottom_right_keeps_the_bottom_above_the_taskbar():
+    # The taskbar shrinks the usable area: work_bottom is 1032, not 1080. The
+    # window bottom (y + height) must land at work_bottom - margin so the buttons
+    # sit above the taskbar instead of being hidden behind it.
+    work_bottom = 1080 - 48
+    _, y = FlyoutWindow.fit_bottom_right(
+        work_left=0,
+        work_top=0,
+        work_right=1920,
+        work_bottom=work_bottom,
+        width=400,
+        height=300,
+        margin=20,
+    )
+
+    assert y + 300 == work_bottom - 20
 
 
 def test_fit_bottom_right_keeps_bottom_visible_when_window_is_taller_than_screen():
@@ -141,7 +165,13 @@ def test_fit_bottom_right_keeps_bottom_visible_when_window_is_taller_than_screen
     # top is clamped to the margin so the bottom edge -- the buttons -- stays on
     # screen instead of being cut off.
     _, y = FlyoutWindow.fit_bottom_right(
-        screen_width=1920, screen_height=1080, width=400, height=2000, margin=20
+        work_left=0,
+        work_top=0,
+        work_right=1920,
+        work_bottom=1080,
+        width=400,
+        height=2000,
+        margin=20,
     )
 
     assert y == 20
