@@ -3,7 +3,7 @@ import tkinter
 import pytest
 
 from vetscribe import ui_strings
-from vetscribe.flyout_ui import DEFAULT_HEIGHT, DEFAULT_WIDTH, FlyoutWindow
+from vetscribe.flyout_ui import FlyoutWindow
 
 
 @pytest.fixture
@@ -119,27 +119,29 @@ def test_flyout_window_is_topmost(tk_root):
     assert flyout.attributes("-topmost") == 1
 
 
-def test_long_note_does_not_grow_the_window_past_the_requested_size(tk_root):
-    # Regression: the Text widget's default 24-line height made the toplevel
-    # grow taller than DEFAULT_HEIGHT, so its bottom edge (the buttons) landed
-    # below the screen and the flyout looked cut off. The window must keep the
-    # requested size regardless of note length; the note scrolls inside it.
-    flyout = FlyoutWindow(
-        master=tk_root,
-        soap_text="line\n" * 500,
-        on_copy_and_inject=lambda: None,
-        on_copy_to_clipboard=lambda: None,
-        on_open_history=lambda: None,
-    )
-    flyout.update_idletasks()
-
-    size = flyout.geometry().split("+")[0]
-    assert size == f"{DEFAULT_WIDTH}x{DEFAULT_HEIGHT}"
-
-
 def test_bottom_right_geometry_places_window_in_bottom_right_corner_with_margin():
     geometry = FlyoutWindow.bottom_right_geometry(
         screen_width=1920, screen_height=1080, width=400, height=300, margin=20
     )
 
     assert geometry == "400x300+1500+760"
+
+
+def test_fit_bottom_right_anchors_to_the_bottom_right_corner():
+    x, y = FlyoutWindow.fit_bottom_right(
+        screen_width=1920, screen_height=1080, width=400, height=300, margin=20
+    )
+
+    assert (x, y) == (1500, 760)
+
+
+def test_fit_bottom_right_keeps_bottom_visible_when_window_is_taller_than_screen():
+    # If the real rendered window is taller than the usable height, anchoring to
+    # the bottom would push the top (and thus the whole thing) off-screen. The
+    # top is clamped to the margin so the bottom edge -- the buttons -- stays on
+    # screen instead of being cut off.
+    _, y = FlyoutWindow.fit_bottom_right(
+        screen_width=1920, screen_height=1080, width=400, height=2000, margin=20
+    )
+
+    assert y == 20

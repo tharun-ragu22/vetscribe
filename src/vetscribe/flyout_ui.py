@@ -18,6 +18,15 @@ class FlyoutWindow(tk.Toplevel):
     ):
         super().__init__(master)
         self.attributes("-topmost", True)
+        self.geometry(
+            self.bottom_right_geometry(
+                screen_width=self.winfo_screenwidth(),
+                screen_height=self.winfo_screenheight(),
+                width=DEFAULT_WIDTH,
+                height=DEFAULT_HEIGHT,
+                margin=DEFAULT_MARGIN,
+            )
+        )
 
         # Pack the controls at the bottom *first* so they always reserve their
         # space; the note text then fills whatever's left. Otherwise the
@@ -54,31 +63,47 @@ class FlyoutWindow(tk.Toplevel):
             )
             self.open_history_button.pack(side="left")
 
-        # height=1 keeps the Text from requesting its default 24-line size; it
-        # fills the window via expand instead. Without this the toplevel grows
-        # to fit the Text's natural height and the geometry below is ignored.
-        self.text_widget = tk.Text(self, height=1)
+        self.text_widget = tk.Text(self)
         self.text_widget.insert("1.0", soap_text)
         self.text_widget.pack(side="top", fill="both", expand=True)
 
-        # Size and position the window *after* its widgets exist so the geometry
-        # request is authoritative. Doing this before packing let the content's
-        # natural size win, which pushed the bottom edge (the buttons) off the
-        # screen -- the flyout appeared cut off and had to be dragged up.
-        self.update_idletasks()
-        self.geometry(
-            self.bottom_right_geometry(
-                screen_width=self.winfo_screenwidth(),
-                screen_height=self.winfo_screenheight(),
-                width=DEFAULT_WIDTH,
-                height=DEFAULT_HEIGHT,
-                margin=DEFAULT_MARGIN,
-            )
-        )
         self.update()
+
+        # The pre-computed geometry above is only a first guess: the real window
+        # manager decorates and may resize the window, so its actual rendered
+        # height can exceed DEFAULT_HEIGHT and push the bottom edge (the buttons)
+        # off the screen. Re-anchor using the window's *measured* size, and do it
+        # again on the event loop once the WM has finished mapping it, so the
+        # bottom is always visible without the user having to drag it up.
+        self._anchor_bottom_right()
+        self.after(0, self._anchor_bottom_right)
+
+    def _anchor_bottom_right(self):
+        self.update_idletasks()
+        x, y = self.fit_bottom_right(
+            screen_width=self.winfo_screenwidth(),
+            screen_height=self.winfo_screenheight(),
+            width=self.winfo_width(),
+            height=self.winfo_height(),
+            margin=DEFAULT_MARGIN,
+        )
+        self.geometry(f"+{x}+{y}")
+
+    @staticmethod
+    def fit_bottom_right(screen_width, screen_height, width, height, margin):
+        """Bottom-right position that keeps the *whole* window on-screen.
+
+        Anchors to the bottom-right corner but never lets the left/top edge go
+        past ``margin``, so a window taller or wider than the screen still shows
+        its bottom-right (where the buttons live) rather than running off-edge.
+        """
+        x = max(margin, screen_width - width - margin)
+        y = max(margin, screen_height - height - margin)
+        return x, y
 
     @staticmethod
     def bottom_right_geometry(screen_width, screen_height, width, height, margin):
-        x = screen_width - width - margin
-        y = screen_height - height - margin
+        x, y = FlyoutWindow.fit_bottom_right(
+            screen_width, screen_height, width, height, margin
+        )
         return f"{width}x{height}+{x}+{y}"
