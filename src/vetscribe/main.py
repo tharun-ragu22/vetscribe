@@ -16,7 +16,7 @@ from vetscribe.history_ui import HistoryWindow
 from vetscribe.hotkey_listener import HotkeyListener
 from vetscribe.logger import build_logger
 from vetscribe.offline_queue import OfflineQueue
-from vetscribe.pipeline import Pipeline
+from vetscribe.pipeline import Pipeline, format_soap_text
 from vetscribe.settings_ui import SettingsWindow
 from vetscribe.tray_app import TrayApp
 from vetscribe.window_icon import apply_window_icon
@@ -90,7 +90,7 @@ def show_flyout(tk_root, injector, soap_text, on_open_history=None):
     return flyout
 
 
-def show_history(tk_root, injector, history_store):
+def show_history(tk_root, injector, history_store, on_regenerate=None):
     injector.remember_active_window()
     window = HistoryWindow(
         master=tk_root,
@@ -101,6 +101,7 @@ def show_history(tk_root, injector, history_store):
             entry_id, soap_text=soap_text, transcript=transcript
         ),
         on_delete=lambda entry_id: history_store.delete(entry_id),
+        on_regenerate=on_regenerate,
     )
     follow_active_avimark(tk_root, injector, window)
     return window
@@ -117,6 +118,17 @@ def build_app(config=None, tk_root=None):
     injector = AvimarkInjector(title_marker=config.target_window_matcher)
     history_store = HistoryStore()
 
+    def regenerate_from_transcript(transcript):
+        # Blocking backend call; HistoryWindow runs this on a worker thread and
+        # marshals the result back to the Tk loop itself.
+        note = api_client.regenerate_soap_note(transcript)
+        return format_soap_text(note)
+
+    def open_history():
+        show_history(
+            tk_root, injector, history_store, on_regenerate=regenerate_from_transcript
+        )
+
     # A note flyout offers an "Open History" button; an error flyout doesn't
     # (there's no note to browse), so it goes through show_flyout directly.
     def show_note_flyout(soap_text):
@@ -124,7 +136,7 @@ def build_app(config=None, tk_root=None):
             tk_root,
             injector,
             soap_text,
-            on_open_history=lambda: show_history(tk_root, injector, history_store),
+            on_open_history=open_history,
         )
 
     offline_queue = OfflineQueue(
@@ -154,9 +166,7 @@ def build_app(config=None, tk_root=None):
         on_show_note=lambda soap_text: run_on_main_thread(
             tk_root, lambda: show_note_flyout(soap_text)
         ),
-        on_show_history=lambda: run_on_main_thread(
-            tk_root, lambda: show_history(tk_root, injector, history_store)
-        ),
+        on_show_history=lambda: run_on_main_thread(tk_root, open_history),
     )
     pipeline.on_state_change = lambda state: tray_app.update_icon_for_state()
     tray_app.attach_offline_queue(offline_queue)

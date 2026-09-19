@@ -1,5 +1,7 @@
 import logging
+import threading
 import tkinter as tk
+from tkinter import messagebox
 
 from vetscribe import ui_strings
 from vetscribe.window_icon import apply_window_icon
@@ -24,6 +26,7 @@ class HistoryWindow(tk.Toplevel):
         on_copy_to_clipboard,
         on_save_edit=None,
         on_delete=None,
+        on_regenerate=None,
         confirm_delete=None,
         poll_interval_ms=DEFAULT_POLL_INTERVAL_MS,
     ):
@@ -38,6 +41,10 @@ class HistoryWindow(tk.Toplevel):
             lambda entry_id, soap_text, transcript: None
         )
         self.on_delete = on_delete or (lambda entry_id: None)
+        # Blocking call (transcript in -> SOAP note text out) that hits the
+        # backend; run off the Tk thread so the window stays responsive.
+        self.on_regenerate = on_regenerate
+        self._regenerating = False
         self._confirm_delete = confirm_delete or self._default_confirm_delete
         self.entries = list(load_entries())
         self._selected_index = None
@@ -72,6 +79,15 @@ class HistoryWindow(tk.Toplevel):
             command=self._on_save_clicked,
         )
         self.save_button.pack(side="left")
+        # Only offered when the app wires up a regenerate callback.
+        self.regenerate_button = None
+        if self.on_regenerate is not None:
+            self.regenerate_button = tk.Button(
+                button_frame,
+                text=ui_strings.BUTTON_REGENERATE,
+                command=self._on_regenerate_clicked,
+            )
+            self.regenerate_button.pack(side="left")
         self.copy_and_inject_button = tk.Button(
             button_frame,
             text=ui_strings.BUTTON_COPY_AND_INJECT,
@@ -206,6 +222,76 @@ class HistoryWindow(tk.Toplevel):
         if updated is not None and self._selected_index is not None:
             self.entries[self._selected_index] = updated
         self._mark_clean()
+
+    def _on_regenerate_clicked(self):
+        if self.on_regenerate is None or self._regenerating:
+            return
+        entry = self._selected_entry()
+        if entry is None:
+            return
+        transcript = self.transcript_text.get("1.0", "end-1c")
+        if not transcript.strip():
+            messagebox.showinfo(
+                ui_strings.REGENERATE_EMPTY_TITLE,
+                ui_strings.REGENERATE_EMPTY_MESSAGE,
+                parent=self,
+            )
+            return
+
+        # Remember which note we're regenerating so a late result is dropped if
+        # the vet has since selected a different note.
+        entry_id = entry.entry_id
+        self._set_regenerating(True)
+
+        def work():
+            try:
+                soap_text = self.on_regenerate(transcript)
+            except Exception as exc:  # noqa: BLE001 -- surfaced to the vet below
+                # Bind exc as a default arg: Python clears the `except ... as`
+                # name when the block exits, before this after() callback runs.
+                self.after(0, lambda err=exc: self._on_regenerate_failed(err))
+                return
+            self.after(0, lambda: self._on_regenerate_done(entry_id, soap_text))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_regenerate_done(self, entry_id, soap_text):
+        self._set_regenerating(False)
+        current = self._selected_entry()
+        if current is None or current.entry_id != entry_id:
+            # The vet moved to another note while the backend was working; the
+            # regenerated note belongs to a note that's no longer on screen.
+            return
+        # Show the fresh note as an unsaved edit -- the vet reviews it and hits
+        # Save Changes to persist, so regeneration is never destructive on its
+        # own. Mark modified so the auto-refresh keeps the pane instead of
+        # repainting it from the store.
+        self._replace_text(self.note_text, soap_text)
+        self.note_text.edit_modified(True)
+
+    def _on_regenerate_failed(self, exc):
+        self._set_regenerating(False)
+        logger.warning("failed to regenerate SOAP note: %s", exc)
+        messagebox.showerror(
+            ui_strings.REGENERATE_ERROR_TITLE,
+            ui_strings.REGENERATE_ERROR_MESSAGE.format(error=exc),
+            parent=self,
+        )
+
+    def _set_regenerating(self, busy):
+        self._regenerating = busy
+        if self.regenerate_button is None:
+            return
+        try:
+            self.regenerate_button.config(
+                state="disabled" if busy else "normal",
+                text=ui_strings.BUTTON_REGENERATE_BUSY
+                if busy
+                else ui_strings.BUTTON_REGENERATE,
+            )
+        except tk.TclError:
+            # Window may have been destroyed between scheduling and running.
+            pass
 
     def _default_confirm_delete(self, entry):
         from tkinter import messagebox

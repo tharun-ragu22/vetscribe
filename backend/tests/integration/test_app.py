@@ -11,12 +11,20 @@ class FakePipeline:
         self.result = SoapResult(note=note, transcript=transcript) if note is not None else None
         self.error = error
         self.received_audio = None
+        self.received_transcript = None
 
     def process(self, audio_bytes):
         self.received_audio = audio_bytes
         if self.error is not None:
             raise self.error
         return self.result
+
+    def generate_from_transcript(self, transcript):
+        self.received_transcript = transcript
+        if self.error is not None:
+            raise self.error
+        # Echo the caller's transcript back, mirroring the real pipeline.
+        return SoapResult(note=self.result.note, transcript=transcript)
 
 
 def test_create_soap_note_returns_200_with_note_and_transcript_json(make_config):
@@ -121,3 +129,68 @@ def test_create_soap_note_returns_400_on_empty_body(make_config):
 
     assert response.status_code == 400
     assert pipeline.received_audio is None
+
+
+def test_regenerate_returns_200_with_note_from_transcript(make_config):
+    note = SoapNote(subjective="s", objective="o", assessment="a", plan="p")
+    pipeline = FakePipeline(note=note)
+    app = create_app(config=make_config(), pipeline=pipeline)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/soap/regenerate", json={"transcript": "the corrected transcript"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "subjective": "s",
+        "objective": "o",
+        "assessment": "a",
+        "plan": "p",
+        "transcript": "the corrected transcript",
+    }
+    assert pipeline.received_transcript == "the corrected transcript"
+
+
+def test_regenerate_returns_400_on_missing_transcript(make_config):
+    pipeline = FakePipeline(note=SoapNote(subjective="s", objective="o", assessment="a", plan="p"))
+    app = create_app(config=make_config(), pipeline=pipeline)
+    client = TestClient(app)
+
+    response = client.post("/api/soap/regenerate", json={})
+
+    assert response.status_code == 400
+    assert pipeline.received_transcript is None
+
+
+def test_regenerate_returns_400_on_blank_transcript(make_config):
+    pipeline = FakePipeline(note=SoapNote(subjective="s", objective="o", assessment="a", plan="p"))
+    app = create_app(config=make_config(), pipeline=pipeline)
+    client = TestClient(app)
+
+    response = client.post("/api/soap/regenerate", json={"transcript": "   "})
+
+    assert response.status_code == 400
+
+
+def test_regenerate_requires_bearer_token_when_backend_api_key_configured(make_config):
+    pipeline = FakePipeline(note=SoapNote(subjective="s", objective="o", assessment="a", plan="p"))
+    app = create_app(config=make_config(backend_api_key="secret"), pipeline=pipeline)
+    client = TestClient(app)
+
+    response = client.post("/api/soap/regenerate", json={"transcript": "t"})
+
+    assert response.status_code == 401
+
+
+def test_regenerate_returns_502_when_note_generation_fails(make_config):
+    pipeline = FakePipeline(
+        note=SoapNote(subjective="s", objective="o", assessment="a", plan="p"),
+        error=httpx.ConnectError("connection refused"),
+    )
+    app = create_app(config=make_config(), pipeline=pipeline)
+    client = TestClient(app)
+
+    response = client.post("/api/soap/regenerate", json={"transcript": "t"})
+
+    assert response.status_code == 502

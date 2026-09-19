@@ -3,9 +3,20 @@ import uuid
 
 import pytest
 
-from vetscribe import ui_strings
+from vetscribe import history_ui, ui_strings
 from vetscribe.history_store import HistoryEntry
 from vetscribe.history_ui import HistoryWindow
+
+
+class _SyncThread:
+    # Stand-in for threading.Thread that runs the worker inline, so the
+    # regenerate path is deterministic in tests; self.after(0, ...) callbacks
+    # it schedules are then flushed with window.update().
+    def __init__(self, target, daemon=None):
+        self._target = target
+
+    def start(self):
+        self._target()
 
 
 @pytest.fixture
@@ -280,6 +291,110 @@ def test_delete_button_is_a_safe_noop_with_nothing_selected(tk_root):
     window.delete_button.invoke()
 
     assert deleted == []
+
+
+def test_regenerate_button_absent_without_a_callback(tk_root):
+    window = make_window(tk_root, [make_entry()])  # no on_regenerate wired
+
+    assert window.regenerate_button is None
+    labels = [
+        child["text"]
+        for child in window.winfo_children()
+        if isinstance(child, tkinter.Button)
+    ]
+    assert ui_strings.BUTTON_REGENERATE not in labels
+
+
+def test_regenerate_sends_edited_transcript_and_shows_note_as_unsaved_edit(
+    tk_root, monkeypatch
+):
+    monkeypatch.setattr(history_ui.threading, "Thread", _SyncThread)
+    received = []
+
+    def fake_regenerate(transcript):
+        received.append(transcript)
+        return "SUBJECTIVE: regenerated from the corrected transcript"
+
+    entry = make_entry(subjective="Original", transcript="orig", entry_id="n1")
+    window = make_window(tk_root, [entry], on_regenerate=fake_regenerate)
+    window.show_entry(0)
+
+    # The vet corrects the transcript, then regenerates.
+    window.transcript_text.delete("1.0", "end")
+    window.transcript_text.insert("1.0", "corrected transcript")
+    window.regenerate_button.invoke()
+    window.update()  # flush the after(0) that applies the result
+
+    assert received == ["corrected transcript"]
+    assert "regenerated from the corrected transcript" in window.note_text.get(
+        "1.0", "end-1c"
+    )
+    # Left as an unsaved edit so nothing is persisted until the vet hits Save.
+    assert window.note_text.edit_modified()
+    assert window.regenerate_button["text"] == ui_strings.BUTTON_REGENERATE
+
+
+def test_regenerate_with_empty_transcript_warns_and_skips_backend(tk_root, monkeypatch):
+    monkeypatch.setattr(history_ui.threading, "Thread", _SyncThread)
+    called = []
+    infos = []
+    monkeypatch.setattr(
+        history_ui.messagebox, "showinfo", lambda *a, **k: infos.append(a)
+    )
+
+    entry = make_entry(subjective="Original", transcript="   ", entry_id="n1")
+    window = make_window(
+        tk_root, [entry], on_regenerate=lambda t: called.append(t) or "x"
+    )
+    window.show_entry(0)
+
+    window.regenerate_button.invoke()
+
+    assert called == []
+    assert len(infos) == 1
+
+
+def test_regenerate_result_is_dropped_when_the_vet_selected_another_note(tk_root):
+    entries = [
+        make_entry(subjective="Newest", transcript="a", entry_id="n1"),
+        make_entry(subjective="Older", transcript="b", entry_id="n2"),
+    ]
+    window = make_window(tk_root, entries, on_regenerate=lambda t: "unused")
+    window.show_entry(1)  # currently on n2
+
+    # A regenerate that was kicked off for n1 finishes late.
+    window._on_regenerate_done("n1", "SUBJECTIVE: stale result for n1")
+
+    # The pane still shows n2; the stale note is not painted over it.
+    assert "SUBJECTIVE: Older" in window.note_text.get("1.0", "end-1c")
+    assert "stale result" not in window.note_text.get("1.0", "end-1c")
+
+
+def test_regenerate_failure_surfaces_an_error_and_re_enables_the_button(
+    tk_root, monkeypatch
+):
+    monkeypatch.setattr(history_ui.threading, "Thread", _SyncThread)
+    errors = []
+    monkeypatch.setattr(
+        history_ui.messagebox, "showerror", lambda *a, **k: errors.append(a)
+    )
+
+    def boom(transcript):
+        raise RuntimeError("backend is down")
+
+    entry = make_entry(subjective="Original", transcript="orig", entry_id="n1")
+    window = make_window(tk_root, [entry], on_regenerate=boom)
+    window.show_entry(0)
+    note_before = window.note_text.get("1.0", "end-1c")
+
+    window.regenerate_button.invoke()
+    window.update()  # flush the after(0) that surfaces the failure
+
+    assert len(errors) == 1
+    # The note is left untouched and the button is usable again.
+    assert window.note_text.get("1.0", "end-1c") == note_before
+    assert window._regenerating is False
+    assert window.regenerate_button["text"] == ui_strings.BUTTON_REGENERATE
 
 
 def test_auto_refresh_does_not_discard_an_in_progress_unsaved_edit(tk_root):

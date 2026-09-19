@@ -19,12 +19,35 @@ def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | Non
 
     app = FastAPI()
 
+    def _unauthorized(request: Request) -> JSONResponse | None:
+        if not config.backend_api_key:
+            return None
+        expected = f"Bearer {config.backend_api_key}"
+        if request.headers.get("authorization") != expected:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        return None
+
+    def _provider_error_response(exc: Exception) -> JSONResponse:
+        # Map every provider-level failure to a clean 502 rather than a raw 500
+        # traceback. New provider failure modes belong in this tuple.
+        if isinstance(exc, httpx.HTTPStatusError):
+            return JSONResponse({"error": f"upstream provider error: {exc}"}, status_code=502)
+        if isinstance(exc, httpx.RequestError):
+            return JSONResponse({"error": f"upstream request failed: {exc}"}, status_code=502)
+        return JSONResponse({"error": str(exc)}, status_code=502)
+
+    _PROVIDER_ERRORS = (
+        httpx.HTTPStatusError,
+        httpx.RequestError,
+        NoteParsingError,
+        TranscriptionError,
+    )
+
     @app.post("/api/soap")
     async def create_soap_note(request: Request):
-        if config.backend_api_key:
-            expected = f"Bearer {config.backend_api_key}"
-            if request.headers.get("authorization") != expected:
-                return JSONResponse({"error": "unauthorized"}, status_code=401)
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
 
         audio_bytes = await request.body()
         if not audio_bytes:
@@ -32,12 +55,30 @@ def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | Non
 
         try:
             result = pipeline.process(audio_bytes)
-        except httpx.HTTPStatusError as exc:
-            return JSONResponse({"error": f"upstream provider error: {exc}"}, status_code=502)
-        except httpx.RequestError as exc:
-            return JSONResponse({"error": f"upstream request failed: {exc}"}, status_code=502)
-        except (NoteParsingError, TranscriptionError) as exc:
-            return JSONResponse({"error": str(exc)}, status_code=502)
+        except _PROVIDER_ERRORS as exc:
+            return _provider_error_response(exc)
+
+        return JSONResponse(result.to_dict())
+
+    @app.post("/api/soap/regenerate")
+    async def regenerate_soap_note(request: Request):
+        # Re-run note generation from a (hand-corrected) transcript, no audio.
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
+
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+        transcript = (body or {}).get("transcript", "")
+        if not isinstance(transcript, str) or not transcript.strip():
+            return JSONResponse({"error": "missing transcript"}, status_code=400)
+
+        try:
+            result = pipeline.generate_from_transcript(transcript)
+        except _PROVIDER_ERRORS as exc:
+            return _provider_error_response(exc)
 
         return JSONResponse(result.to_dict())
 
