@@ -13,4 +13,5 @@ Guidelines:
 - Plan: treatment plan, medications, and follow-up instructions discussed.
 - If the transcript does not contain enough information for a field, write "Not discussed" for \
   that field rather than inventing information.
+- DO NOT DRAW ANY CONCLUSIONS, JUST RETURN NOTES OF WHAT WAS EXPLICITLY DISCUSSED 
 """
