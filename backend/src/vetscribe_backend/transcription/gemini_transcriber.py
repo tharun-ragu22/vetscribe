@@ -1,11 +1,21 @@
 import base64
+import logging
 
 import httpx
 
 from vetscribe_backend.config import BackendConfig
 from vetscribe_backend.transcription import Transcriber
 
+logger = logging.getLogger("vetscribe_backend.transcription.gemini")
+
 ENDPOINT_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+# gemini-2.5 models spend output-token budget on hidden "thinking" tokens before
+# emitting text, and diarized two-speaker transcripts are far more token-heavy than
+# a monologue (a label + newline per turn). Without an explicit budget the response
+# hits the default cap and returns a silently-truncated transcript. Transcription
+# needs no reasoning, so we disable thinking and give the whole budget to the text.
+MAX_OUTPUT_TOKENS = 8192
 
 TRANSCRIPTION_PROMPT = (
     "Transcribe this veterinary exam-room audio verbatim with speaker diarization. "
@@ -47,14 +57,18 @@ class GeminiTranscriber(Transcriber):
                             {"inline_data": {"mime_type": "audio/wav", "data": audio_b64}},
                         ]
                     }
-                ]
+                ],
+                "generationConfig": {
+                    "maxOutputTokens": MAX_OUTPUT_TOKENS,
+                    "thinkingConfig": {"thinkingBudget": 0},
+                },
             },
             timeout=self.timeout_seconds,
         )
         response.raise_for_status()
         data = response.json()
         try:
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
         except (KeyError, IndexError) as exc:
             block_reason = data.get("promptFeedback", {}).get("blockReason")
             finish_reason = (data.get("candidates") or [{}])[0].get("finishReason")
@@ -63,3 +77,12 @@ class GeminiTranscriber(Transcriber):
                 f"(blockReason={block_reason}, finishReason={finish_reason}); "
                 "the audio may be empty, silent, or blocked"
             ) from exc
+
+        finish_reason = data["candidates"][0].get("finishReason")
+        if finish_reason == "MAX_TOKENS":
+            logger.warning(
+                "Gemini transcript truncated at the %d-token output cap "
+                "(finishReason=MAX_TOKENS); the returned note may be incomplete",
+                MAX_OUTPUT_TOKENS,
+            )
+        return text

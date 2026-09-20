@@ -63,6 +63,52 @@ def test_transcribe_prompt_requests_speaker_diarization():
 
 
 @respx.mock
+def test_transcribe_disables_thinking_and_sets_output_budget():
+    import json
+
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "Owner: hi"}]}}]},
+        )
+    )
+
+    GeminiTranscriber(api_key="key123", model="gemini-2.5-flash").transcribe(b"RIFF....")
+
+    gen_config = json.loads(route.calls.last.request.content)["generationConfig"]
+    assert gen_config["maxOutputTokens"] >= 8192
+    assert gen_config["thinkingConfig"]["thinkingBudget"] == 0
+
+
+@respx.mock
+def test_transcribe_returns_partial_text_when_truncated(caplog):
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "Veterinarian: so far so"}]},
+                        "finishReason": "MAX_TOKENS",
+                    }
+                ]
+            },
+        )
+    )
+
+    transcriber = GeminiTranscriber(api_key="key123", model="gemini-2.0-flash")
+    with caplog.at_level("WARNING"):
+        text = transcriber.transcribe(b"RIFF....")
+
+    assert text == "Veterinarian: so far so"
+    assert "truncated" in caplog.text.lower()
+
+
+@respx.mock
 def test_transcribe_raises_on_http_error():
     respx.post(
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
