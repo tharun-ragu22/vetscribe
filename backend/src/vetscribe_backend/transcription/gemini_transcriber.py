@@ -7,6 +7,16 @@ from vetscribe_backend.transcription import Transcriber
 
 ENDPOINT_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
+TRANSCRIPTION_PROMPT = (
+    "Transcribe this veterinary exam-room audio verbatim with speaker diarization. "
+    "Attribute every utterance to a speaker and start each speaker's turn on its own line "
+    'prefixed with a label followed by a colon, e.g. "Veterinarian:" and "Owner:". '
+    'Use "Veterinarian:", "Owner:", and "Technician:" when the role is clear from context; '
+    'otherwise fall back to "Speaker 1:", "Speaker 2:", and so on, keeping each speaker\'s '
+    "label consistent throughout. Do not add any commentary, headings, or summary. "
+    "Respond with only the labelled transcript text."
+)
+
 
 class TranscriptionError(Exception):
     pass
@@ -33,7 +43,7 @@ class GeminiTranscriber(Transcriber):
                 "contents": [
                     {
                         "parts": [
-                            {"text": "Transcribe this audio verbatim. Respond with only the transcript text."},
+                            {"text": TRANSCRIPTION_PROMPT},
                             {"inline_data": {"mime_type": "audio/wav", "data": audio_b64}},
                         ]
                     }
