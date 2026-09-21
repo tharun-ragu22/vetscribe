@@ -206,7 +206,12 @@ def build_app(config=None, tk_root=None):
     def open_settings():
         SettingsWindow(master=tk_root, config=current_config["value"], on_save=apply_settings)
 
-    tray_app.on_open_settings = open_settings
+    # The tray menu fires on the pystray icon thread, so -- like on_show_note /
+    # on_show_history above -- constructing the Tk window must be marshalled onto
+    # the main thread; a direct Tk construction from the tray thread deadlocks
+    # (hard-to-kill hang, no traceback), especially while another window's
+    # follow_active_avimark after-loop is keeping the Tcl interpreter busy.
+    tray_app.on_open_settings = lambda: run_on_main_thread(tk_root, open_settings)
 
     return tray_app, hotkey_listener, tk_root
 

@@ -276,6 +276,34 @@ def test_open_settings_opens_settings_window_with_current_config(mocker):
     assert kwargs["config"] is config
 
 
+def test_open_settings_from_tray_thread_is_marshalled_onto_main_thread(mocker):
+    # The tray menu fires on the pystray icon thread. Constructing the Tk
+    # SettingsWindow directly from a background thread deadlocks (no traceback);
+    # it must be marshalled via tk_root.after, exactly like history/note.
+    mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+
+    def click_from_tray_thread():
+        tray_app.open_settings()
+
+    t = threading.Thread(target=click_from_tray_thread)
+    t.start()
+    t.join()
+
+    # Off the main thread, the window must NOT be built inline; the work is
+    # handed to the Tk event loop instead.
+    mock_settings_cls.assert_not_called()
+    tk_root.after.assert_called_once()
+    assert tk_root.after.call_args.args[0] == 0
+
+
 def test_saving_settings_persists_config_and_updates_live_components(mocker, tmp_path):
     mock_settings_cls = mocker.patch("vetscribe.main.SettingsWindow")
     mocker.patch("vetscribe.main.autostart")
