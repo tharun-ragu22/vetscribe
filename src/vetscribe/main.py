@@ -6,7 +6,7 @@ from pathlib import Path
 import pyperclip
 
 from vetscribe import autostart
-from vetscribe.api_client import ApiClient
+from vetscribe.api_client import ApiClient, SoapNote
 from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
@@ -14,6 +14,7 @@ from vetscribe.flyout_ui import FlyoutWindow
 from vetscribe.history_store import HistoryStore
 from vetscribe.history_ui import HistoryWindow
 from vetscribe.hotkey_listener import HotkeyListener
+from vetscribe.injection_poller import InjectionPoller
 from vetscribe.logger import build_logger
 from vetscribe.offline_queue import OfflineQueue
 from vetscribe.pipeline import Pipeline, format_soap_text
@@ -147,6 +148,34 @@ def build_app(config=None, tk_root=None):
         history_store=history_store,
     )
 
+    def handle_remote_injection(request):
+        # A mobile "Inject into AVImark" tap: build the note text from the exam
+        # the backend attached to the request, then reuse the exact same safety
+        # path as the flyout's Copy & Inject -- actively raise AVImark and paste
+        # only into a genuinely-targetable chart. If we can't safely target one
+        # (no AVImark window, or several open with no remembered chart),
+        # focus_and_inject refuses; fall back to the Safety Flyout with the note
+        # ready rather than risk the wrong patient's chart. Runs on the main
+        # thread (marshalled below) because it touches Win32 and Tk.
+        exam = request.get("exam") or {}
+        note = SoapNote(
+            subjective=exam.get("subjective", ""),
+            objective=exam.get("objective", ""),
+            assessment=exam.get("assessment", ""),
+            plan=exam.get("plan", ""),
+            transcript=exam.get("transcript", ""),
+        )
+        soap_text = format_soap_text(note)
+        if not injector.focus_and_inject(soap_text):
+            show_note_flyout(soap_text)
+
+    injection_poller = InjectionPoller(
+        api_client=api_client,
+        on_injection=lambda request: run_on_main_thread(
+            tk_root, lambda: handle_remote_injection(request)
+        ),
+    )
+
     pipeline = Pipeline(
         recorder=recorder,
         api_client=api_client,
@@ -170,6 +199,7 @@ def build_app(config=None, tk_root=None):
     )
     pipeline.on_state_change = lambda state: tray_app.update_icon_for_state()
     tray_app.attach_offline_queue(offline_queue)
+    tray_app.attach_injection_poller(injection_poller)
     tray_app.attach_tk_root(tk_root)
 
     def dispatch_hotkey_trigger():
@@ -222,7 +252,8 @@ def run():
     tray_app, hotkey_listener, tk_root = build_app()
     hotkey_listener.start()
     tray_app.offline_queue.start()
-    logger.info("offline retry queue started, ready for hotkey")
+    tray_app.injection_poller.start()
+    logger.info("offline retry queue and remote-injection poller started, ready for hotkey")
     # Run the tray icon on its own thread so the main thread is free to run
     # the Tk mainloop, which is required for flyout/settings windows to be
     # created safely (Tk calls from other threads must go through the

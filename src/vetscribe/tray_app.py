@@ -32,6 +32,7 @@ class TrayApp:
         self.pipeline = pipeline
         self.hotkey_listener = None
         self.offline_queue = None
+        self.injection_poller = None
         self.tk_root = None
         self.on_open_settings = on_open_settings or (lambda: None)
         self.on_show_note = on_show_note or (lambda soap_text: None)
@@ -69,6 +70,9 @@ class TrayApp:
 
     def attach_offline_queue(self, offline_queue):
         self.offline_queue = offline_queue
+
+    def attach_injection_poller(self, injection_poller):
+        self.injection_poller = injection_poller
 
     def attach_tk_root(self, tk_root):
         self.tk_root = tk_root
@@ -111,6 +115,8 @@ class TrayApp:
             self.pipeline.recorder.stop()
         if self.offline_queue is not None:
             self.offline_queue.stop()
+        if self.injection_poller is not None:
+            self.injection_poller.stop()
         self.icon.stop()
         if self.tk_root is not None:
             self.tk_root.after(0, self.tk_root.quit)

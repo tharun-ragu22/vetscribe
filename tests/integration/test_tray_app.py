@@ -173,3 +173,14 @@ def test_quit_without_attached_offline_queue_does_not_raise():
     tray_app.icon.stop = MagicMock()
 
     tray_app.quit()
+
+
+def test_quit_stops_attached_injection_poller():
+    tray_app, _pipeline = make_tray_app(state=PipelineState.IDLE)
+    tray_app.icon.stop = MagicMock()
+    injection_poller = MagicMock()
+    tray_app.attach_injection_poller(injection_poller)
+
+    tray_app.quit()
+
+    injection_poller.stop.assert_called_once()

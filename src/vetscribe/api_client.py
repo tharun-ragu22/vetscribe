@@ -65,6 +65,47 @@ class ApiClient:
 
         return self._parse_soap_response(response)
 
+    def _api_base(self) -> str:
+        # The configured endpoint is the audio POST URL (".../api/soap"); the
+        # injection endpoints live alongside it under ".../api/injections", so
+        # drop the trailing path segment. Keeps a single configured URL.
+        return self.endpoint.rstrip("/").rsplit("/", 1)[0]
+
+    def fetch_pending_injections(self) -> list:
+        # Poll the backend for mobile-originated requests to paste a note into
+        # AVImark. Each request carries the exam's current note to inject.
+        url = f"{self._api_base()}/injections/pending"
+        headers = self._auth_headers({})
+        try:
+            response = httpx.get(url, headers=headers, timeout=self.timeout_seconds)
+        except httpx.RequestError as exc:
+            logger.error("fetch pending injections failed: %s", exc)
+            raise ApiClientError(f"request failed: {exc}") from exc
+
+        if response.status_code != 200:
+            raise ApiClientError(
+                f"backend returned {response.status_code}: {response.text}"
+            )
+        return response.json().get("requests", [])
+
+    def ack_injection(self, request_id: str, outcome: str) -> None:
+        # Tell the backend a pending injection request has been handled so it's
+        # dropped from the pending list and never re-delivered.
+        url = f"{self._api_base()}/injections/{request_id}/ack"
+        headers = self._auth_headers({"Content-Type": "application/json"})
+        try:
+            response = httpx.post(
+                url, json={"outcome": outcome}, headers=headers, timeout=self.timeout_seconds
+            )
+        except httpx.RequestError as exc:
+            logger.error("ack injection failed: %s", exc)
+            raise ApiClientError(f"request failed: {exc}") from exc
+
+        if response.status_code != 200:
+            raise ApiClientError(
+                f"backend returned {response.status_code}: {response.text}"
+            )
+
     def regenerate_soap_note(self, transcript: str) -> SoapNote:
         # Ask the backend to re-run only note generation over a hand-corrected
         # transcript. Derived from the same base endpoint the audio POST uses so

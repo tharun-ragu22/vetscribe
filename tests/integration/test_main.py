@@ -440,6 +440,82 @@ def test_view_history_opens_window_with_notes_from_both_save_paths(mocker, tmp_p
     assert target.entry_id not in remaining_ids
 
 
+def test_build_app_wires_injection_poller_to_api_client_and_tray_app():
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+
+    assert tray_app.injection_poller is not None
+    assert tray_app.injection_poller.api_client is tray_app.pipeline.api_client
+
+
+def _injection_request():
+    return {
+        "id": "req-1",
+        "exam_id": "exam-1",
+        "exam": {
+            "subjective": "s",
+            "objective": "o",
+            "assessment": "a",
+            "plan": "p",
+            "transcript": "t",
+        },
+    }
+
+
+_EXPECTED_NOTE = "SUBJECTIVE: s\nOBJECTIVE: o\nASSESSMENT: a\nPLAN: p"
+
+
+def test_remote_injection_pastes_into_avimark_and_skips_flyout_when_targetable(mocker):
+    mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    inject = mocker.patch.object(
+        tray_app.pipeline.injector, "focus_and_inject", return_value=True
+    )
+
+    tray_app.injection_poller.on_injection(_injection_request())
+
+    # The note is pasted straight into the AVImark chart; no flyout needed.
+    inject.assert_called_once_with(_EXPECTED_NOTE)
+    mock_flyout_cls.assert_not_called()
+
+
+def test_remote_injection_falls_back_to_safety_flyout_when_not_targetable(mocker):
+    mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
+    config = Config(
+        api_endpoint="https://example.test/soap",
+        api_timeout_seconds=15,
+        hotkey="<ctrl>+<shift>+r",
+    )
+    tk_root = MagicMock()
+
+    tray_app, _, _ = build_app(config=config, tk_root=tk_root)
+    mocker.patch.object(
+        tray_app.pipeline.injector, "focus_and_inject", return_value=False
+    )
+
+    tray_app.injection_poller.on_injection(_injection_request())
+
+    # AVImark wasn't safely targetable, so the note surfaces in the Safety Flyout
+    # with the same text, ready for a manual Copy & Inject.
+    mock_flyout_cls.assert_called_once()
+    _, kwargs = mock_flyout_cls.call_args
+    assert kwargs["master"] is tk_root
+    assert kwargs["soap_text"] == _EXPECTED_NOTE
+
+
 def test_build_app_offline_queue_on_note_ready_shows_flyout(mocker):
     mock_flyout_cls = mocker.patch("vetscribe.main.FlyoutWindow")
     config = Config(

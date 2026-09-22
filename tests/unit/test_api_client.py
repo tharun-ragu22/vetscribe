@@ -258,3 +258,101 @@ def test_regenerate_soap_note_raises_api_client_error_on_http_error_status():
 
     with pytest.raises(ApiClientError, match="502"):
         client.regenerate_soap_note("transcript")
+
+
+@respx.mock
+def test_fetch_pending_injections_returns_requests_list():
+    route = respx.get("https://vetscribe.example.com/api/injections/pending").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "requests": [
+                    {
+                        "id": "req-1",
+                        "exam_id": "exam-1",
+                        "created_at": "2026-09-22T00:00:00+00:00",
+                        "status": "pending",
+                        "outcome": None,
+                        "exam": {
+                            "id": "exam-1",
+                            "subjective": "s",
+                            "objective": "o",
+                            "assessment": "a",
+                            "plan": "p",
+                            "transcript": "t",
+                        },
+                    }
+                ]
+            },
+        )
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=5)
+    requests = client.fetch_pending_injections()
+
+    assert route.called
+    assert len(requests) == 1
+    assert requests[0]["id"] == "req-1"
+    assert requests[0]["exam"]["assessment"] == "a"
+
+
+@respx.mock
+def test_fetch_pending_injections_sends_bearer_token_when_configured():
+    route = respx.get("https://vetscribe.example.com/api/injections/pending").mock(
+        return_value=httpx.Response(200, json={"requests": []})
+    )
+
+    client = ApiClient(
+        endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=5, api_key="secret"
+    )
+    assert client.fetch_pending_injections() == []
+    assert route.calls.last.request.headers["Authorization"] == "Bearer secret"
+
+
+@respx.mock
+def test_fetch_pending_injections_raises_api_client_error_on_transport_failure():
+    respx.get("https://vetscribe.example.com/api/injections/pending").mock(
+        side_effect=httpx.ConnectError("connection refused")
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=5)
+
+    with pytest.raises(ApiClientError):
+        client.fetch_pending_injections()
+
+
+@respx.mock
+def test_fetch_pending_injections_raises_on_http_error_status():
+    respx.get("https://vetscribe.example.com/api/injections/pending").mock(
+        return_value=httpx.Response(500, text="boom")
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=5)
+
+    with pytest.raises(ApiClientError, match="500"):
+        client.fetch_pending_injections()
+
+
+@respx.mock
+def test_ack_injection_posts_outcome_to_the_request_endpoint():
+    route = respx.post("https://vetscribe.example.com/api/injections/req-1/ack").mock(
+        return_value=httpx.Response(200, json={"id": "req-1", "status": "done"})
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=5)
+    client.ack_injection("req-1", outcome="injected")
+
+    assert route.called
+    assert json.loads(route.calls.last.request.content) == {"outcome": "injected"}
+
+
+@respx.mock
+def test_ack_injection_raises_api_client_error_on_transport_failure():
+    respx.post("https://vetscribe.example.com/api/injections/req-1/ack").mock(
+        side_effect=httpx.ConnectError("connection refused")
+    )
+
+    client = ApiClient(endpoint="https://vetscribe.example.com/api/soap", timeout_seconds=5)
+
+    with pytest.raises(ApiClientError):
+        client.ack_injection("req-1", outcome="injected")
