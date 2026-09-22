@@ -115,6 +115,30 @@ jobs:
         working-directory: backend
         run: uv run pytest -v
 
+  test-mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Run tests
+        working-directory: mobile
+        run: npm test
+
   backend-evals:
     needs: [test-backend, changes]
     if: needs.changes.outputs.backend == 'true'
