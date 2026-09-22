@@ -200,6 +200,7 @@ def test_regenerate_returns_502_when_note_generation_fails(make_config):
 
 # --- Cross-device sync: history + exam editing ------------------------------
 
+from vetscribe_backend.injection_queue import InjectionQueue  # noqa: E402
 from vetscribe_backend.store import ExamStore  # noqa: E402
 
 
@@ -322,5 +323,130 @@ def test_update_exam_requires_bearer_token_when_backend_api_key_configured(make_
         f"/api/exams/{exam.id}",
         json={"subjective": "s", "objective": "o", "assessment": "a", "plan": "p", "transcript": "t"},
     )
+
+    assert response.status_code == 401
+
+
+# --- Remote AVImark injection bridge ----------------------------------------
+
+
+def _app_with(store=None, injection_queue=None, backend_api_key=None, make_config=None):
+    return create_app(
+        config=make_config(backend_api_key=backend_api_key),
+        pipeline=FakePipeline(note=_note()),
+        store=store if store is not None else ExamStore(),
+        injection_queue=injection_queue if injection_queue is not None else InjectionQueue(),
+    )
+
+
+def test_request_injection_enqueues_and_returns_202(make_config):
+    store = ExamStore()
+    exam = store.add(_note(), transcript="t")
+    queue = InjectionQueue()
+    app = _app_with(store=store, injection_queue=queue, make_config=make_config)
+    client = TestClient(app)
+
+    response = client.post(f"/api/exams/{exam.id}/inject")
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["exam_id"] == exam.id
+    assert body["status"] == "pending"
+    assert [r.exam_id for r in queue.pending()] == [exam.id]
+
+
+def test_request_injection_returns_404_for_unknown_exam(make_config):
+    app = _app_with(make_config=make_config)
+    client = TestClient(app)
+
+    assert client.post("/api/exams/nope/inject").status_code == 404
+
+
+def test_request_injection_requires_bearer_token_when_configured(make_config):
+    store = ExamStore()
+    exam = store.add(_note(), transcript="t")
+    app = _app_with(store=store, backend_api_key="secret", make_config=make_config)
+    client = TestClient(app)
+
+    assert client.post(f"/api/exams/{exam.id}/inject").status_code == 401
+
+
+def test_pending_injections_enrich_each_request_with_the_current_exam_note(make_config):
+    store = ExamStore()
+    exam = store.add(_note("needs-injection"), transcript="the transcript")
+    queue = InjectionQueue()
+    app = _app_with(store=store, injection_queue=queue, make_config=make_config)
+    client = TestClient(app)
+
+    client.post(f"/api/exams/{exam.id}/inject")
+    pending = client.get("/api/injections/pending").json()["requests"]
+
+    assert len(pending) == 1
+    assert pending[0]["exam_id"] == exam.id
+    # The desktop needs the note text to paste, resolved fresh so it reflects edits.
+    assert pending[0]["exam"]["assessment"] == "needs-injection"
+    assert pending[0]["exam"]["transcript"] == "the transcript"
+
+
+def test_pending_injections_reflect_edits_made_after_the_request(make_config):
+    store = ExamStore()
+    exam = store.add(_note("before"), transcript="t")
+    queue = InjectionQueue()
+    app = _app_with(store=store, injection_queue=queue, make_config=make_config)
+    client = TestClient(app)
+
+    client.post(f"/api/exams/{exam.id}/inject")
+    client.put(
+        f"/api/exams/{exam.id}",
+        json={
+            "subjective": "s",
+            "objective": "o",
+            "assessment": "after",
+            "plan": "p",
+            "transcript": "t",
+        },
+    )
+    pending = client.get("/api/injections/pending").json()["requests"]
+
+    assert pending[0]["exam"]["assessment"] == "after"
+
+
+def test_pending_injections_requires_bearer_token_when_configured(make_config):
+    app = _app_with(backend_api_key="secret", make_config=make_config)
+    client = TestClient(app)
+
+    assert client.get("/api/injections/pending").status_code == 401
+
+
+def test_ack_injection_marks_it_done_and_drops_it_from_pending(make_config):
+    store = ExamStore()
+    exam = store.add(_note(), transcript="t")
+    queue = InjectionQueue()
+    app = _app_with(store=store, injection_queue=queue, make_config=make_config)
+    client = TestClient(app)
+
+    req = client.post(f"/api/exams/{exam.id}/inject").json()
+    response = client.post(f"/api/injections/{req['id']}/ack", json={"outcome": "injected"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "done"
+    assert response.json()["outcome"] == "injected"
+    assert client.get("/api/injections/pending").json()["requests"] == []
+
+
+def test_ack_injection_returns_404_for_unknown_request(make_config):
+    app = _app_with(make_config=make_config)
+    client = TestClient(app)
+
+    response = client.post("/api/injections/missing/ack", json={"outcome": "injected"})
+
+    assert response.status_code == 404
+
+
+def test_ack_injection_requires_bearer_token_when_configured(make_config):
+    app = _app_with(backend_api_key="secret", make_config=make_config)
+    client = TestClient(app)
+
+    response = client.post("/api/injections/x/ack", json={"outcome": "injected"})
 
     assert response.status_code == 401

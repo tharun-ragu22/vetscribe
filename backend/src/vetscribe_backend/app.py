@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from vetscribe_backend.config import BackendConfig
+from vetscribe_backend.injection_queue import InjectionQueue
 from vetscribe_backend.note_generation import get_note_generator
 from vetscribe_backend.note_generation.parsing import NoteParsingError
 from vetscribe_backend.pipeline import SoapPipeline
@@ -17,6 +18,7 @@ def create_app(
     config: BackendConfig | None = None,
     pipeline: SoapPipeline | None = None,
     store: ExamStore | None = None,
+    injection_queue: InjectionQueue | None = None,
 ) -> FastAPI:
     config = config or BackendConfig.from_env()
     pipeline = pipeline or SoapPipeline(
@@ -24,6 +26,7 @@ def create_app(
         note_generator=get_note_generator(config),
     )
     store = store if store is not None else ExamStore()
+    injection_queue = injection_queue if injection_queue is not None else InjectionQueue()
 
     app = FastAPI()
 
@@ -144,5 +147,52 @@ def create_app(
         if exam is None:
             return JSONResponse({"error": "exam not found"}, status_code=404)
         return JSONResponse(exam.to_dict())
+
+    # --- Remote AVImark injection bridge ------------------------------------
+    # The mobile app asks (POST .../inject) for an exam's note to be pasted into
+    # AVImark on the exam-room PC. The desktop tray app polls
+    # GET /api/injections/pending, does the injection (or shows the Safety
+    # Flyout), then acks. The backend never touches AVImark itself; it only
+    # relays the request so the phone and the PC don't need to reach each other.
+
+    @app.post("/api/exams/{exam_id}/inject")
+    async def request_injection(exam_id: str, request: Request):
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
+        if store.get(exam_id) is None:
+            return JSONResponse({"error": "exam not found"}, status_code=404)
+        req = injection_queue.request(exam_id)
+        return JSONResponse(req.to_dict(), status_code=202)
+
+    @app.get("/api/injections/pending")
+    async def list_pending_injections(request: Request):
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
+        requests = []
+        for req in injection_queue.pending():
+            payload = req.to_dict()
+            # Resolve the note fresh at poll time so any edits the vet made after
+            # tapping Inject are reflected in what actually gets pasted.
+            exam = store.get(req.exam_id)
+            payload["exam"] = exam.to_dict() if exam is not None else None
+            requests.append(payload)
+        return JSONResponse({"requests": requests})
+
+    @app.post("/api/injections/{request_id}/ack")
+    async def ack_injection(request_id: str, request: Request):
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        outcome = (body or {}).get("outcome", "injected")
+        req = injection_queue.ack(request_id, outcome=outcome)
+        if req is None:
+            return JSONResponse({"error": "injection request not found"}, status_code=404)
+        return JSONResponse(req.to_dict())
 
     return app

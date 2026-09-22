@@ -84,6 +84,27 @@ Storage is a JSON file (durable across restarts) at `~/.vetscribe/exams.json` by
 override with `VETSCRIBE_EXAMS_PATH`. The backend remains the authoritative source of truth —
 clients read and write through it and keep no independent copy.
 
+## Remote AVImark injection
+
+The mobile app (`mobile/`) can ask for an exam's note to be pasted into AVImark on the
+exam-room PC without the phone and the PC ever talking directly. The mobile app POSTs an
+injection request to the backend; the desktop tray app polls the backend for pending
+requests (the same firewall-friendly pattern its offline retry queue already uses), does the
+paste using its existing safety guard (inject into AVImark only if it's the foreground window,
+otherwise raise the Safety Flyout with the note ready), then acks. Endpoints, all behind the
+same bearer auth:
+
+| Method & path | Purpose |
+|---|---|
+| `POST /api/exams/{id}/inject` | Mobile: request injection of this exam's note. `202` with the request, `404` if the exam is unknown |
+| `GET /api/injections/pending` | Desktop: list pending requests, each enriched with the exam's *current* note (`{"requests": [{"id", "exam_id", "exam": {...}}]}`) so edits made after tapping Inject are reflected |
+| `POST /api/injections/{id}/ack` | Desktop: mark a request handled (`{"outcome": "injected"｜"flyout"｜...}`); `404` if unknown |
+
+The injection queue is intentionally **in-memory, not durable**: a request only means "paste
+this now, while the vet is standing at the PC." A request that survived a backend restart could
+land in whatever chart happened to be open later, so dropping them on restart is the safe
+behavior — unlike exam history, which is durable.
+
 ## Testing
 
 ```bash
