@@ -37,6 +37,30 @@ sits at the very edge and is the only untested part:
   the desktop's hard rule: a failure must **never** strand the machine — a failed start falls
   back to idle, a failed stop still resets to idle rather than getting stuck in processing.
 
+### Screens (Expo Router)
+
+Navigation uses **Expo Router**; route files live in `src/app/` and every other file
+(components, services) stays outside it. The presentational screens in `src/components/`
+take their collaborators as props so their tests stay pure (RNTL against fakes); the
+route files pull the wired services from `ServicesProvider` (`src/services/context.tsx`,
+the mobile analogue of the desktop `build_app()`) and pass them down.
+
+| Route | Screen | Purpose |
+|---|---|---|
+| `/` (`index`) | `RecorderScreen` | One-tap exam capture (feature A) |
+| `/history` | `HistoryScreen` | Backend-synced exam feed (feature B) |
+| `/exam/[id]` | `ExamEditor` | Inline SOAP editor + **Inject into AVImark** (features B & C) |
+
+**Inject into AVImark** (feature C) posts an injection request for the exam to the
+backend; the phone never talks to the exam-room PC directly. The Windows tray app polls
+the backend, then pastes the note into AVImark — or shows its Safety Flyout if AVImark
+isn't foreground. See the repo `backend/README.md` "Remote AVImark injection" section.
+
+> **Dependency note:** the React family is pinned to `19.2.3` (a `react-dom` override
+> plus an exact `react-test-renderer`) so the `expo-router` deps resolve under a plain
+> `npm ci` without `legacy-peer-deps` — which would otherwise drop jest-expo's peer
+> Jest preset and break the test run.
+
 ## Getting started
 
 ```bash
