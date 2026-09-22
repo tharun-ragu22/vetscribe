@@ -103,6 +103,17 @@ npm run test:watch     # TDD watch mode
 Jest uses the `jest-expo` preset (transforms TypeScript and the Expo/RN ES modules). Pure-logic
 services import no native module, so their suites run anywhere.
 
+Three layers of test run under the same `npm test` (and so under CI's `test-mobile` job):
+
+- **Unit** — services and components in isolation against injected fakes (`*.test.ts(x)`).
+- **Integration** (`src/integration/*.integration.test.ts`) — the real `ApiClient` driven
+  against `FakeBackend`, an in-memory stand-in faithful to `backend/`'s routes and JSON shapes.
+  Covers cross-device sync (two clients, one backend) and the remote-injection bridge (phone
+  request → desktop poll/ack, including fresh-note resolution).
+- **End-to-end** (`src/integration/screens.e2e.test.tsx`) — the real screens rendered and driven
+  with actual gestures (tap record, edit + save, tap Inject) through the real `ApiClient` and
+  `FakeBackend` — the closest thing to a device run in Node, with mocked audio uploads.
+
 ### Local dev note (this repo's WSL checkout)
 
 `/workspace` here is a 9p/drvfs mount whose concurrent `rename` semantics break npm's installer.
