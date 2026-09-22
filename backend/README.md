@@ -67,6 +67,23 @@ Listens on port 8443 by default (override with `PORT`), matching VetScribe's def
 point VetScribe's Settings at `http://localhost:8443/api/soap`, or put a TLS-terminating proxy in
 front of it for anything beyond local testing.
 
+## History & cross-device sync
+
+Every generated note is persisted so it can sync across the desktop tray app and the mobile
+app (`mobile/`). `POST /api/soap` now stores the note and returns it with an `id` and
+`created_at` (existing clients that read only the SOAP fields are unaffected). Additional
+endpoints, all behind the same bearer auth:
+
+| Method & path | Purpose |
+|---|---|
+| `GET /api/history` | List all exams, newest first: `{"exams": [ ... ]}` |
+| `GET /api/exams/{id}` | Fetch one exam (404 if unknown) |
+| `PUT /api/exams/{id}` | Save inline edits (`subjective`/`objective`/`assessment`/`plan`/`transcript`, optional `patient_name`); 400 on missing fields, 404 if unknown |
+
+Storage is a JSON file (durable across restarts) at `~/.vetscribe/exams.json` by default;
+override with `VETSCRIBE_EXAMS_PATH`. The backend remains the authoritative source of truth —
+clients read and write through it and keep no independent copy.
+
 ## Testing
 
 ```bash

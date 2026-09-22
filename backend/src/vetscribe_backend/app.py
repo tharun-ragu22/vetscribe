@@ -6,16 +6,24 @@ from vetscribe_backend.config import BackendConfig
 from vetscribe_backend.note_generation import get_note_generator
 from vetscribe_backend.note_generation.parsing import NoteParsingError
 from vetscribe_backend.pipeline import SoapPipeline
+from vetscribe_backend.store import ExamStore
 from vetscribe_backend.transcription import get_transcriber
 from vetscribe_backend.transcription.gemini_transcriber import TranscriptionError
 
+_NOTE_FIELDS = ("subjective", "objective", "assessment", "plan", "transcript")
 
-def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | None = None) -> FastAPI:
+
+def create_app(
+    config: BackendConfig | None = None,
+    pipeline: SoapPipeline | None = None,
+    store: ExamStore | None = None,
+) -> FastAPI:
     config = config or BackendConfig.from_env()
     pipeline = pipeline or SoapPipeline(
         transcriber=get_transcriber(config),
         note_generator=get_note_generator(config),
     )
+    store = store if store is not None else ExamStore()
 
     app = FastAPI()
 
@@ -58,7 +66,9 @@ def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | Non
         except _PROVIDER_ERRORS as exc:
             return _provider_error_response(exc)
 
-        return JSONResponse(result.to_dict())
+        # Persist so the note syncs to every device (mobile + desktop history).
+        exam = store.add(result.note, result.transcript)
+        return JSONResponse(exam.to_dict())
 
     @app.post("/api/soap/regenerate")
     async def regenerate_soap_note(request: Request):
@@ -81,5 +91,58 @@ def create_app(config: BackendConfig | None = None, pipeline: SoapPipeline | Non
             return _provider_error_response(exc)
 
         return JSONResponse(result.to_dict())
+
+    @app.get("/api/history")
+    async def list_history(request: Request):
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
+        return JSONResponse({"exams": [exam.to_dict() for exam in store.list()]})
+
+    @app.get("/api/exams/{exam_id}")
+    async def get_exam(exam_id: str, request: Request):
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
+        exam = store.get(exam_id)
+        if exam is None:
+            return JSONResponse({"error": "exam not found"}, status_code=404)
+        return JSONResponse(exam.to_dict())
+
+    @app.put("/api/exams/{exam_id}")
+    async def update_exam(exam_id: str, request: Request):
+        # Save the vet's inline edits back to the authoritative record.
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
+
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+        body = body or {}
+
+        missing = [f for f in _NOTE_FIELDS if not isinstance(body.get(f), str)]
+        if missing:
+            return JSONResponse(
+                {"error": f"missing or invalid fields: {', '.join(missing)}"}, status_code=400
+            )
+
+        patient_name = body.get("patient_name")
+        if patient_name is not None and not isinstance(patient_name, str):
+            return JSONResponse({"error": "patient_name must be a string"}, status_code=400)
+
+        exam = store.update(
+            exam_id,
+            subjective=body["subjective"],
+            objective=body["objective"],
+            assessment=body["assessment"],
+            plan=body["plan"],
+            transcript=body["transcript"],
+            patient_name=patient_name,
+        )
+        if exam is None:
+            return JSONResponse({"error": "exam not found"}, status_code=404)
+        return JSONResponse(exam.to_dict())
 
     return app
