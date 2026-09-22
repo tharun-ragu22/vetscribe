@@ -1,0 +1,163 @@
+import type { AudioBody, Exam, SoapNote } from './types';
+
+export class ApiClientError extends Error {}
+
+/** Minimal Response shape we depend on — decouples us from the DOM/undici lib. */
+export interface HttpResponse {
+  ok: boolean;
+  status: number;
+  json(): Promise<unknown>;
+  text(): Promise<string>;
+}
+
+export interface HttpRequestInit {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  signal?: unknown;
+}
+
+export type HttpFetch = (url: string, init?: HttpRequestInit) => Promise<HttpResponse>;
+
+export interface ApiClientOptions {
+  baseUrl: string;
+  apiKey?: string;
+  /** Injectable fetch for tests; defaults to the platform global fetch. */
+  fetch?: HttpFetch;
+  /** Per-request timeout in ms; 0 disables it. */
+  timeoutMs?: number;
+}
+
+interface RawExam {
+  id: string;
+  created_at: string;
+  patient_name?: string | null;
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
+  transcript: string;
+}
+
+/**
+ * REST + sync client for the VetScribe backend. Mirrors the desktop ApiClient's
+ * contract (POST /api/soap with raw audio bytes, POST /api/soap/regenerate with a
+ * transcript) and adds the cross-device sync surface: /api/history and /api/exams/:id.
+ *
+ * The backend is the authoritative source of truth for medical records; this client
+ * only reads and writes through it — it keeps no local copy.
+ */
+export class ApiClient {
+  private readonly baseUrl: string;
+  private readonly apiKey: string;
+  private readonly fetch: HttpFetch;
+  private readonly timeoutMs: number;
+
+  constructor(options: ApiClientOptions) {
+    this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+    this.apiKey = options.apiKey ?? '';
+    this.fetch = options.fetch ?? ((globalThis as { fetch?: HttpFetch }).fetch as HttpFetch);
+    this.timeoutMs = options.timeoutMs ?? 60000;
+  }
+
+  /** Upload a recording and get back the persisted, generated exam note. */
+  async generateNote(audio: AudioBody, mimeType: string): Promise<Exam> {
+    const raw = await this.request('/api/soap', {
+      method: 'POST',
+      headers: { 'Content-Type': mimeType },
+      body: audio,
+    });
+    return this.toExam(raw as RawExam);
+  }
+
+  /** Fetch all exams (newest first), synced across mobile and desktop sessions. */
+  async fetchHistory(): Promise<Exam[]> {
+    const raw = (await this.request('/api/history', { method: 'GET' })) as { exams?: RawExam[] };
+    return (raw.exams ?? []).map((e) => this.toExam(e));
+  }
+
+  /** Fetch a single exam by id. */
+  async getExam(id: string): Promise<Exam> {
+    const raw = await this.request(`/api/exams/${encodeURIComponent(id)}`, { method: 'GET' });
+    return this.toExam(raw as RawExam);
+  }
+
+  /** Save the vet's inline edits back to the authoritative backend. */
+  async updateExam(id: string, note: SoapNote): Promise<Exam> {
+    const raw = await this.request(`/api/exams/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(note),
+    });
+    return this.toExam(raw as RawExam);
+  }
+
+  /** Re-run note generation from a hand-corrected transcript (no re-transcription). */
+  async regenerateNote(transcript: string): Promise<SoapNote> {
+    const raw = (await this.request('/api/soap/regenerate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript }),
+    })) as Partial<RawExam>;
+    return {
+      subjective: raw.subjective ?? '',
+      objective: raw.objective ?? '',
+      assessment: raw.assessment ?? '',
+      plan: raw.plan ?? '',
+      transcript: raw.transcript ?? transcript,
+    };
+  }
+
+  private authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    const headers = { ...extra };
+    if (this.apiKey) {
+      headers.Authorization = `Bearer ${this.apiKey}`;
+    }
+    return headers;
+  }
+
+  private async request(path: string, init: HttpRequestInit): Promise<unknown> {
+    const url = `${this.baseUrl}${path}`;
+    const controller = this.timeoutMs > 0 ? new AbortController() : null;
+    const timer = controller
+      ? setTimeout(() => controller.abort(), this.timeoutMs)
+      : null;
+
+    let response: HttpResponse;
+    try {
+      response = await this.fetch(url, {
+        ...init,
+        headers: this.authHeaders(init.headers),
+        signal: controller?.signal,
+      });
+    } catch (error) {
+      throw new ApiClientError(`request to ${path} failed: ${(error as Error).message}`);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new ApiClientError(`backend returned ${response.status}: ${detail}`);
+    }
+
+    try {
+      return await response.json();
+    } catch (error) {
+      throw new ApiClientError(`invalid JSON from ${path}: ${(error as Error).message}`);
+    }
+  }
+
+  private toExam(raw: RawExam): Exam {
+    return {
+      id: raw.id,
+      createdAt: raw.created_at,
+      patientName: raw.patient_name ?? undefined,
+      subjective: raw.subjective,
+      objective: raw.objective,
+      assessment: raw.assessment,
+      plan: raw.plan,
+      transcript: raw.transcript,
+    };
+  }
+}
