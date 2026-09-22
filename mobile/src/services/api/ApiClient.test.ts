@@ -179,4 +179,55 @@ describe('ApiClient', () => {
       expect(JSON.parse(calls[0].body as string)).toEqual({ transcript: 'corrected transcript' });
     });
   });
+
+  describe('requestInjection', () => {
+    const pendingRequest = {
+      id: 'req-1',
+      exam_id: 'exam-1',
+      created_at: '2026-09-22T10:05:00Z',
+      status: 'pending',
+      outcome: null,
+    };
+
+    it('POSTs to /api/exams/:id/inject with bearer auth and maps the response', async () => {
+      const { fetchFn, calls } = stubFetch(() =>
+        jsonResponse(pendingRequest, { status: 202 }),
+      );
+      const client = new ApiClient({ baseUrl: 'http://host:8000', apiKey: 'secret', fetch: fetchFn });
+
+      const req = await client.requestInjection('exam-1');
+
+      expect(calls[0].url).toBe('http://host:8000/api/exams/exam-1/inject');
+      expect(calls[0].method).toBe('POST');
+      expect(calls[0].headers['Authorization']).toBe('Bearer secret');
+      expect(req).toEqual({
+        id: 'req-1',
+        examId: 'exam-1',
+        createdAt: '2026-09-22T10:05:00Z',
+        status: 'pending',
+        outcome: null,
+      });
+    });
+
+    it('url-encodes the exam id', async () => {
+      const { fetchFn, calls } = stubFetch(() =>
+        jsonResponse(pendingRequest, { status: 202 }),
+      );
+      const client = new ApiClient({ baseUrl: 'http://host:8000', fetch: fetchFn });
+
+      await client.requestInjection('a/b');
+
+      expect(calls[0].url).toBe('http://host:8000/api/exams/a%2Fb/inject');
+    });
+
+    it('raises ApiClientError when the exam is unknown (404)', async () => {
+      const { fetchFn } = stubFetch(() =>
+        jsonResponse({ error: 'exam not found' }, { ok: false, status: 404 }),
+      );
+      const client = new ApiClient({ baseUrl: 'http://host:8000', fetch: fetchFn });
+
+      await expect(client.requestInjection('missing')).rejects.toBeInstanceOf(ApiClientError);
+      await expect(client.requestInjection('missing')).rejects.toThrow(/404/);
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import type { AudioBody, Exam, SoapNote } from './types';
+import type { AudioBody, Exam, InjectionRequest, SoapNote } from './types';
 
 export class ApiClientError extends Error {}
 
@@ -37,6 +37,14 @@ interface RawExam {
   assessment: string;
   plan: string;
   transcript: string;
+}
+
+interface RawInjectionRequest {
+  id: string;
+  exam_id: string;
+  created_at: string;
+  status: string;
+  outcome: string | null;
 }
 
 /**
@@ -105,6 +113,26 @@ export class ApiClient {
       assessment: raw.assessment ?? '',
       plan: raw.plan ?? '',
       transcript: raw.transcript ?? transcript,
+    };
+  }
+
+  /**
+   * Ask the backend to have this exam's note pasted into AVImark on the desktop.
+   * The phone and the exam-room PC never talk directly: the backend queues the
+   * request and the desktop tray app polls for it, so this works regardless of
+   * which network the phone is on. Returns immediately once queued (HTTP 202) —
+   * the actual paste happens on the desktop moments later.
+   */
+  async requestInjection(examId: string): Promise<InjectionRequest> {
+    const raw = (await this.request(`/api/exams/${encodeURIComponent(examId)}/inject`, {
+      method: 'POST',
+    })) as RawInjectionRequest;
+    return {
+      id: raw.id,
+      examId: raw.exam_id,
+      createdAt: raw.created_at,
+      status: raw.status,
+      outcome: raw.outcome,
     };
   }
 
