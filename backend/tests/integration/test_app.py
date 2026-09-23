@@ -327,6 +327,42 @@ def test_update_exam_requires_bearer_token_when_backend_api_key_configured(make_
     assert response.status_code == 401
 
 
+def test_delete_exam_removes_it_and_returns_200(make_config):
+    store = ExamStore()
+    exam = store.add(_note(), transcript="t")
+    app = create_app(config=make_config(), pipeline=FakePipeline(note=_note()), store=store)
+    client = TestClient(app)
+
+    response = client.delete(f"/api/exams/{exam.id}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+    assert store.get(exam.id) is None
+    assert client.get(f"/api/exams/{exam.id}").status_code == 404
+
+
+def test_delete_exam_returns_404_for_unknown_id(make_config):
+    app = create_app(config=make_config(), pipeline=FakePipeline(note=_note()), store=ExamStore())
+    client = TestClient(app)
+
+    assert client.delete("/api/exams/missing").status_code == 404
+
+
+def test_delete_exam_requires_bearer_token_when_backend_api_key_configured(make_config):
+    store = ExamStore()
+    exam = store.add(_note(), transcript="t")
+    app = create_app(
+        config=make_config(backend_api_key="secret"),
+        pipeline=FakePipeline(note=_note()),
+        store=store,
+    )
+    client = TestClient(app)
+
+    assert client.delete(f"/api/exams/{exam.id}").status_code == 401
+    ok = client.delete(f"/api/exams/{exam.id}", headers={"Authorization": "Bearer secret"})
+    assert ok.status_code == 200
+
+
 # --- Remote AVImark injection bridge ----------------------------------------
 
 

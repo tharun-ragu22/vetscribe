@@ -107,6 +107,14 @@ class ExamStore:
             self._persist()
             return updated
 
+    def delete(self, exam_id: str) -> bool:
+        with self._lock:
+            if exam_id not in self._exams:
+                return False
+            del self._exams[exam_id]
+            self._persist()
+            return True
+
     def _persist(self) -> None:  # pragma: no cover - no-op for the in-memory store
         """Hook called under the lock after every mutation. In-memory: nothing to do."""
 

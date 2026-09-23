@@ -148,6 +148,15 @@ def create_app(
             return JSONResponse({"error": "exam not found"}, status_code=404)
         return JSONResponse(exam.to_dict())
 
+    @app.delete("/api/exams/{exam_id}")
+    async def delete_exam(exam_id: str, request: Request):
+        unauthorized = _unauthorized(request)
+        if unauthorized is not None:
+            return unauthorized
+        if not store.delete(exam_id):
+            return JSONResponse({"error": "exam not found"}, status_code=404)
+        return JSONResponse({"status": "deleted"})
+
     # --- Remote AVImark injection bridge ------------------------------------
     # The mobile app asks (POST .../inject) for an exam's note to be pasted into
     # AVImark on the exam-room PC. The desktop tray app polls

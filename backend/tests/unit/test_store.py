@@ -79,6 +79,29 @@ def test_update_returns_none_for_an_unknown_id():
     assert store.update("missing", subjective="", objective="", assessment="", plan="", transcript="") is None
 
 
+def test_delete_removes_the_exam_and_reports_whether_it_existed():
+    store = _fixed_store()
+    exam = store.add(_note(), transcript="t")
+
+    assert store.delete(exam.id) is True
+    assert store.get(exam.id) is None
+    # Deleting again (now unknown) reports False.
+    assert store.delete(exam.id) is False
+
+
+def test_json_file_store_persists_deletions_across_instances(tmp_path):
+    path = tmp_path / "exams.json"
+    store = JsonFileExamStore(path)
+    keep = store.add(_note("keep"), transcript="k")
+    drop = store.add(_note("drop"), transcript="d")
+
+    assert store.delete(drop.id) is True
+
+    reopened = JsonFileExamStore(path)
+    assert reopened.get(drop.id) is None
+    assert [e.id for e in reopened.list()] == [keep.id]
+
+
 def test_json_file_store_round_trips_across_instances(tmp_path):
     path = tmp_path / "exams.json"
     store = JsonFileExamStore(path)
