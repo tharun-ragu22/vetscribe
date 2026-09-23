@@ -165,6 +165,15 @@ export class FakeBackend {
       if (method === 'PUT') {
         return this.updateExam(id, init.body);
       }
+      if (method === 'DELETE') {
+        const before = this.exams.length;
+        for (let i = this.exams.length - 1; i >= 0; i -= 1) {
+          if (this.exams[i].id === id) this.exams.splice(i, 1);
+        }
+        return before === this.exams.length
+          ? response({ error: 'exam not found' }, 404)
+          : response({ status: 'deleted' });
+      }
     }
 
     // POST /api/exams/:id/inject — enqueue a remote injection request

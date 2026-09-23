@@ -166,6 +166,38 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('deleteExam', () => {
+    it('DELETEs the exam by id with bearer auth', async () => {
+      const { fetchFn, calls } = stubFetch(() => jsonResponse({ status: 'deleted' }));
+      const client = new ApiClient({ baseUrl: 'http://host:8000', apiKey: 'k', fetch: fetchFn });
+
+      await client.deleteExam('exam-1');
+
+      expect(calls[0].url).toBe('http://host:8000/api/exams/exam-1');
+      expect(calls[0].method).toBe('DELETE');
+      expect(calls[0].headers['Authorization']).toBe('Bearer k');
+    });
+
+    it('url-encodes the exam id', async () => {
+      const { fetchFn, calls } = stubFetch(() => jsonResponse({ status: 'deleted' }));
+      const client = new ApiClient({ baseUrl: 'http://host:8000', fetch: fetchFn });
+
+      await client.deleteExam('a/b');
+
+      expect(calls[0].url).toBe('http://host:8000/api/exams/a%2Fb');
+    });
+
+    it('raises ApiClientError when the exam is unknown (404)', async () => {
+      const { fetchFn } = stubFetch(() =>
+        jsonResponse({ error: 'exam not found' }, { ok: false, status: 404 }),
+      );
+      const client = new ApiClient({ baseUrl: 'http://host:8000', fetch: fetchFn });
+
+      await expect(client.deleteExam('missing')).rejects.toBeInstanceOf(ApiClientError);
+      await expect(client.deleteExam('missing')).rejects.toThrow(/404/);
+    });
+  });
+
   describe('regenerateNote', () => {
     it('POSTs a hand-corrected transcript to /api/soap/regenerate', async () => {
       const { fetchFn, calls } = stubFetch(() => jsonResponse(exampleExam));

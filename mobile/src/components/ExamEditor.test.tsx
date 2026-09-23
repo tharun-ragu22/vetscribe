@@ -18,7 +18,7 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
   };
 }
 
-type EditorApi = Pick<ApiClient, 'updateExam' | 'requestInjection'>;
+type EditorApi = Pick<ApiClient, 'updateExam' | 'requestInjection' | 'deleteExam'>;
 
 function makeApiClient(overrides: Partial<EditorApi> = {}): EditorApi {
   return {
@@ -30,6 +30,7 @@ function makeApiClient(overrides: Partial<EditorApi> = {}): EditorApi {
       status: 'pending',
       outcome: null,
     })),
+    deleteExam: jest.fn(async () => {}),
     ...overrides,
   } as unknown as EditorApi;
 }
@@ -97,5 +98,39 @@ describe('ExamEditor', () => {
     fireEvent.press(screen.getByText(/inject into avimark/i));
 
     await waitFor(() => expect(screen.getByText(/404/)).toBeTruthy());
+  });
+
+  it('requires a confirming second tap before deleting, then removes it', async () => {
+    const apiClient = makeApiClient();
+    const onDeleted = jest.fn();
+    render(
+      <ExamEditor exam={makeExam({ id: 'exam-9' })} apiClient={apiClient} onDeleted={onDeleted} />,
+    );
+
+    // First tap only arms the confirmation — nothing is deleted yet.
+    fireEvent.press(screen.getByText(/^delete exam$/i));
+    expect(apiClient.deleteExam).not.toHaveBeenCalled();
+    expect(screen.getByText(/tap again/i)).toBeTruthy();
+
+    // Second tap performs the delete and notifies the caller.
+    fireEvent.press(screen.getByText(/tap again/i));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
+    expect(apiClient.deleteExam).toHaveBeenCalledWith('exam-9');
+  });
+
+  it('surfaces a delete failure and does not notify the caller', async () => {
+    const apiClient = makeApiClient({
+      deleteExam: jest.fn(async () => {
+        throw new Error('backend returned 500');
+      }),
+    });
+    const onDeleted = jest.fn();
+    render(<ExamEditor exam={makeExam()} apiClient={apiClient} onDeleted={onDeleted} />);
+
+    fireEvent.press(screen.getByText(/^delete exam$/i));
+    fireEvent.press(screen.getByText(/tap again/i));
+
+    await waitFor(() => expect(screen.getByText(/500/)).toBeTruthy());
+    expect(onDeleted).not.toHaveBeenCalled();
   });
 });

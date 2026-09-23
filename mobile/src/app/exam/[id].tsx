@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
@@ -50,7 +50,8 @@ export default function ExamRoute() {
     );
   }
 
-  return <ExamEditor exam={exam} apiClient={apiClient} />;
+  // After deletion the exam no longer exists, so leave this screen.
+  return <ExamEditor exam={exam} apiClient={apiClient} onDeleted={() => router.back()} />;
 }
 
 const styles = StyleSheet.create({

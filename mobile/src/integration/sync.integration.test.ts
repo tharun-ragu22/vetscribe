@@ -53,6 +53,23 @@ describe('cross-device sync (integration)', () => {
     expect(history[1].id).toBe(first.id);
   });
 
+  it('an exam deleted on one device disappears from the other device history', async () => {
+    const { deviceA, deviceB } = twoDevices();
+    const created = await deviceA.generateNote(new Uint8Array([1]), 'audio/m4a');
+    // Both devices see it first.
+    expect((await deviceB.fetchHistory()).map((e) => e.id)).toContain(created.id);
+
+    await deviceA.deleteExam(created.id);
+
+    expect((await deviceB.fetchHistory()).map((e) => e.id)).not.toContain(created.id);
+  });
+
+  it('deleting an unknown exam raises', async () => {
+    const { deviceA } = twoDevices();
+
+    await expect(deviceA.deleteExam('nope')).rejects.toThrow(/404/);
+  });
+
   it('enforces bearer auth when the backend is configured with a key', async () => {
     const backend = new FakeBackend({ apiKey: 'clinic-secret' });
     const authed = new ApiClient({

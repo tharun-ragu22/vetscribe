@@ -100,6 +100,11 @@ export class ApiClient {
     return this.toExam(raw as RawExam);
   }
 
+  /** Delete an exam from the shared history so it's gone on every device. */
+  async deleteExam(id: string): Promise<void> {
+    await this.request(`/api/exams/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
   /** Re-run note generation from a hand-corrected transcript (no re-transcription). */
   async regenerateNote(transcript: string): Promise<SoapNote> {
     const raw = (await this.request('/api/soap/regenerate', {

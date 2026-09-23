@@ -6,10 +6,12 @@ import type { Exam, SoapNote } from '../services/api/types';
 
 export interface ExamEditorProps {
   exam: Exam;
-  /** Editing writes through updateExam; the Inject button uses requestInjection. */
-  apiClient: Pick<ApiClient, 'updateExam' | 'requestInjection'>;
+  /** Editing writes through updateExam; Inject uses requestInjection; Delete uses deleteExam. */
+  apiClient: Pick<ApiClient, 'updateExam' | 'requestInjection' | 'deleteExam'>;
   /** Called with the persisted exam after a successful save. */
   onSaved?: (exam: Exam) => void;
+  /** Called after the exam is deleted from the backend (e.g. to navigate away). */
+  onDeleted?: () => void;
 }
 
 const SECTIONS: ReadonlyArray<readonly [keyof SoapNote, string]> = [
@@ -22,6 +24,9 @@ const SECTIONS: ReadonlyArray<readonly [keyof SoapNote, string]> = [
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 type InjectStatus = 'idle' | 'sending' | 'sent' | 'error';
+// Deleting is destructive and irreversible, so it takes a confirming second tap
+// (mirrors the desktop History window's confirmation dialog).
+type DeleteStatus = 'idle' | 'confirm' | 'deleting' | 'error';
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -36,7 +41,7 @@ function messageOf(error: unknown): string {
  * desktop tray app polls for the request and does the paste (or shows its Safety
  * Flyout). It's a fire-and-forget request that returns as soon as it's queued.
  */
-export function ExamEditor({ exam, apiClient, onSaved }: ExamEditorProps) {
+export function ExamEditor({ exam, apiClient, onSaved, onDeleted }: ExamEditorProps) {
   const [note, setNote] = useState<SoapNote>({
     subjective: exam.subjective,
     objective: exam.objective,
@@ -48,6 +53,8 @@ export function ExamEditor({ exam, apiClient, onSaved }: ExamEditorProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [injectStatus, setInjectStatus] = useState<InjectStatus>('idle');
   const [injectError, setInjectError] = useState<string | null>(null);
+  const [deleteStatus, setDeleteStatus] = useState<DeleteStatus>('idle');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const setField = (key: keyof SoapNote, value: string) => {
     setNote((current) => ({ ...current, [key]: value }));
@@ -80,8 +87,32 @@ export function ExamEditor({ exam, apiClient, onSaved }: ExamEditorProps) {
     }
   };
 
+  const handleDelete = async () => {
+    // First tap arms the confirmation; the second tap actually deletes.
+    if (deleteStatus === 'idle' || deleteStatus === 'error') {
+      setDeleteError(null);
+      setDeleteStatus('confirm');
+      return;
+    }
+    if (deleteStatus !== 'confirm') return;
+    setDeleteStatus('deleting');
+    try {
+      await apiClient.deleteExam(exam.id);
+      onDeleted?.();
+    } catch (e) {
+      setDeleteError(messageOf(e));
+      setDeleteStatus('error');
+    }
+  };
+
   const saveLabel = saveStatus === 'saving' ? 'Saving…' : 'Save Changes';
   const injectLabel = injectStatus === 'sending' ? 'Sending…' : 'Inject into AVImark';
+  const deleteLabel =
+    deleteStatus === 'deleting'
+      ? 'Deleting…'
+      : deleteStatus === 'confirm'
+        ? 'Tap again to delete'
+        : 'Delete Exam';
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -127,6 +158,18 @@ export function ExamEditor({ exam, apiClient, onSaved }: ExamEditorProps) {
       {injectStatus === 'error' ? (
         <Text style={styles.error}>Injection request failed: {injectError}</Text>
       ) : null}
+
+      <Pressable
+        accessibilityRole="button"
+        style={[styles.button, styles.delete, deleteStatus === 'deleting' && styles.busy]}
+        onPress={handleDelete}
+        disabled={deleteStatus === 'deleting'}
+      >
+        <Text style={styles.buttonText}>{deleteLabel}</Text>
+      </Pressable>
+      {deleteStatus === 'error' ? (
+        <Text style={styles.error}>Delete failed: {deleteError}</Text>
+      ) : null}
     </ScrollView>
   );
 }
@@ -171,6 +214,9 @@ const styles = StyleSheet.create({
   },
   inject: {
     backgroundColor: '#1b7f4b',
+  },
+  delete: {
+    backgroundColor: '#c0392b',
   },
   busy: {
     opacity: 0.6,

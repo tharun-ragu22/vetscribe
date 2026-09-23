@@ -49,7 +49,7 @@ the mobile analogue of the desktop `build_app()`) and pass them down.
 |---|---|---|
 | `/` (`index`) | `RecorderScreen` | One-tap exam capture (feature A) |
 | `/history` | `HistoryScreen` | Backend-synced exam feed (feature B) |
-| `/exam/[id]` | `ExamEditor` | Inline SOAP editor + **Inject into AVImark** (features B & C) |
+| `/exam/[id]` | `ExamEditor` | Inline SOAP editor, **Inject into AVImark**, and **Delete** (features B & C) |
 
 **Inject into AVImark** (feature C) posts an injection request for the exam to the
 backend; the phone never talks to the exam-room PC directly. The Windows tray app polls
