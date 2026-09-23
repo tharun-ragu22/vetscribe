@@ -36,7 +36,6 @@ class Pipeline:
         recordings_dir=None,
         offline_queue=None,
         on_state_change=None,
-        history_store=None,
     ):
         self.recorder = recorder
         self.api_client = api_client
@@ -50,7 +49,6 @@ class Pipeline:
         )
         self.offline_queue = offline_queue
         self.on_state_change = on_state_change or (lambda state: None)
-        self.history_store = history_store
         self.state = PipelineState.IDLE
         self.last_soap_text = None
 
@@ -94,7 +92,9 @@ class Pipeline:
         self.last_soap_text = soap_text
         logger.info("SOAP note generated successfully")
 
-        self._save_to_history(soap_note)
+        # No local history save here: the backend already persisted this exam
+        # when generate_soap_note() posted the audio, and the History window
+        # reads that shared record so it syncs across every device.
 
         logger.info("attempting to inject SOAP note into AVImark")
         injected = self.injector.inject(soap_text)
@@ -104,16 +104,6 @@ class Pipeline:
 
         self._transition(PipelineState.IDLE)
         logger.info("done, back to idle")
-
-    def _save_to_history(self, soap_note):
-        # Best-effort: persisting to history must never block delivering the
-        # note to the user or leave the state machine stuck in PROCESSING.
-        if self.history_store is None:
-            return
-        try:
-            self.history_store.save(soap_note)
-        except Exception:
-            logger.exception("failed to save SOAP note to history")
 
     def _save_failed_audio(self, audio_bytes):
         self.recordings_dir.mkdir(parents=True, exist_ok=True)

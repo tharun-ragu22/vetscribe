@@ -11,7 +11,7 @@ from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
 from vetscribe.flyout_ui import FlyoutWindow
-from vetscribe.history_store import HistoryStore
+from vetscribe.backend_history_store import BackendHistoryStore
 from vetscribe.history_ui import HistoryWindow
 from vetscribe.hotkey_listener import HotkeyListener
 from vetscribe.injection_poller import InjectionPoller
@@ -98,9 +98,7 @@ def show_history(tk_root, injector, history_store, on_regenerate=None):
         load_entries=history_store.list_entries,
         on_copy_and_inject=lambda soap_text: injector.focus_and_inject(soap_text),
         on_copy_to_clipboard=lambda soap_text: pyperclip.copy(soap_text),
-        on_save_edit=lambda entry_id, soap_text, transcript: history_store.update(
-            entry_id, soap_text=soap_text, transcript=transcript
-        ),
+        on_save_edit=lambda entry_id, **fields: history_store.update(entry_id, **fields),
         on_delete=lambda entry_id: history_store.delete(entry_id),
         on_regenerate=on_regenerate,
     )
@@ -117,13 +115,15 @@ def build_app(config=None, tk_root=None):
     recorder = AudioRecorder()
     api_client = ApiClient(config.api_endpoint, config.api_timeout_seconds, config.api_key)
     injector = AvimarkInjector(title_marker=config.target_window_matcher)
-    history_store = HistoryStore()
+    # The shared exam history lives on the backend (the same records the mobile
+    # app reads); a local cache keeps History usable through a brief outage.
+    history_store = BackendHistoryStore(api_client)
 
     def regenerate_from_transcript(transcript):
         # Blocking backend call; HistoryWindow runs this on a worker thread and
-        # marshals the result back to the Tk loop itself.
-        note = api_client.regenerate_soap_note(transcript)
-        return format_soap_text(note)
+        # marshals the result back to the Tk loop itself. Returns the structured
+        # note so the window can repopulate its four SOAP fields.
+        return api_client.regenerate_soap_note(transcript)
 
     def open_history():
         show_history(
@@ -145,7 +145,6 @@ def build_app(config=None, tk_root=None):
         on_note_ready=lambda soap_text: run_on_main_thread(
             tk_root, lambda: show_note_flyout(soap_text)
         ),
-        history_store=history_store,
     )
 
     def handle_remote_injection(request):
@@ -187,7 +186,6 @@ def build_app(config=None, tk_root=None):
             tk_root, lambda: show_flyout(tk_root, injector, message)
         ),
         offline_queue=offline_queue,
-        history_store=history_store,
     )
 
     tray_app = TrayApp(

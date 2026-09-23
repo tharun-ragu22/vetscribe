@@ -28,6 +28,10 @@ BUTTON_SAVE = "Save"
 # History detail-pane labels
 LABEL_SOAP_NOTE = "SOAP Note"
 LABEL_TRANSCRIPT = "Transcript"
+LABEL_SUBJECTIVE = "Subjective"
+LABEL_OBJECTIVE = "Objective"
+LABEL_ASSESSMENT = "Assessment"
+LABEL_PLAN = "Plan"
 
 # Settings field labels
 LABEL_API_ENDPOINT = "API Endpoint URL"

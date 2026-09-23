@@ -8,13 +8,21 @@ from vetscribe.window_icon import apply_window_icon
 
 logger = logging.getLogger("vetscribe.history_ui")
 
-DEFAULT_WIDTH = 720
-DEFAULT_HEIGHT = 480
-# How often an open window re-reads the store so notes recorded while it's open
-# appear without the vet reopening it. A save happens on the pipeline thread or
-# the offline-queue thread; polling on the Tk event loop picks up both without
-# any cross-thread widget access.
+DEFAULT_WIDTH = 760
+DEFAULT_HEIGHT = 640
+# How often an open window re-reads the store so notes recorded (on this desktop
+# or on the phone) while it's open appear without the vet reopening it. The read
+# goes through the backend-backed store on the Tk event loop.
 DEFAULT_POLL_INTERVAL_MS = 1000
+
+# The four structured SOAP fields, in display order, paired with their labels.
+# Both apps edit these same fields so edits sync cleanly across devices.
+_SOAP_FIELDS = (
+    ("subjective", ui_strings.LABEL_SUBJECTIVE),
+    ("objective", ui_strings.LABEL_OBJECTIVE),
+    ("assessment", ui_strings.LABEL_ASSESSMENT),
+    ("plan", ui_strings.LABEL_PLAN),
+)
 
 
 class HistoryWindow(tk.Toplevel):
@@ -38,11 +46,11 @@ class HistoryWindow(tk.Toplevel):
         self.on_copy_and_inject = on_copy_and_inject
         self.on_copy_to_clipboard = on_copy_to_clipboard
         self.on_save_edit = on_save_edit or (
-            lambda entry_id, soap_text, transcript: None
+            lambda entry_id, **fields: None
         )
         self.on_delete = on_delete or (lambda entry_id: None)
-        # Blocking call (transcript in -> SOAP note text out) that hits the
-        # backend; run off the Tk thread so the window stays responsive.
+        # Blocking call (transcript in -> SoapNote out) that hits the backend;
+        # run off the Tk thread so the window stays responsive.
         self.on_regenerate = on_regenerate
         self._regenerating = False
         self._confirm_delete = confirm_delete or self._default_confirm_delete
@@ -59,16 +67,20 @@ class HistoryWindow(tk.Toplevel):
         self.listbox.config(yscrollcommand=scrollbar.set)
         self.listbox.bind("<<ListboxSelect>>", self._on_listbox_select)
 
-        # Right: the selected note and its transcript.
+        # Right: the selected note's four SOAP fields and its transcript, each
+        # separately editable (matching the phone's editor so edits sync).
         detail_frame = tk.Frame(self)
         detail_frame.pack(side="right", fill="both", expand=True)
 
-        tk.Label(detail_frame, text=ui_strings.LABEL_SOAP_NOTE).pack(anchor="w")
-        self.note_text = tk.Text(detail_frame, height=12, wrap="word")
-        self.note_text.pack(fill="both", expand=True)
+        self.field_texts = {}
+        for key, label in _SOAP_FIELDS:
+            tk.Label(detail_frame, text=label).pack(anchor="w")
+            widget = tk.Text(detail_frame, height=3, wrap="word")
+            widget.pack(fill="both", expand=True)
+            self.field_texts[key] = widget
 
         tk.Label(detail_frame, text=ui_strings.LABEL_TRANSCRIPT).pack(anchor="w")
-        self.transcript_text = tk.Text(detail_frame, height=8, wrap="word")
+        self.transcript_text = tk.Text(detail_frame, height=6, wrap="word")
         self.transcript_text.pack(fill="both", expand=True)
 
         button_frame = tk.Frame(detail_frame)
@@ -121,10 +133,15 @@ class HistoryWindow(tk.Toplevel):
 
     @staticmethod
     def _row_label(entry) -> str:
-        preview = entry.subjective.replace("\n", " ")
+        # Prefer the patient's name when the backend has one (phone-captured
+        # exams do); otherwise fall back to a snippet of the subjective.
+        preview = (entry.patient_name or entry.subjective or "").replace("\n", " ")
         if len(preview) > 40:
             preview = preview[:39] + "…"
-        return f"{entry.timestamp}  {preview}"
+        return f"{entry.created_at}  {preview}"
+
+    def _all_text_widgets(self):
+        return list(self.field_texts.values()) + [self.transcript_text]
 
     def _populate_listbox(self):
         self.listbox.delete(0, "end")
@@ -153,8 +170,7 @@ class HistoryWindow(tk.Toplevel):
         if not self.entries:
             self._selected_index = None
             if not dirty:
-                self._replace_text(self.note_text, "")
-                self._replace_text(self.transcript_text, "")
+                self._clear_fields()
                 self._mark_clean()
             return
 
@@ -183,7 +199,7 @@ class HistoryWindow(tk.Toplevel):
         if entry is None:
             return None
         for index, candidate in enumerate(self.entries):
-            if candidate.entry_id == entry.entry_id:
+            if candidate.id == entry.id:
                 return index
         return None
 
@@ -195,28 +211,33 @@ class HistoryWindow(tk.Toplevel):
     def show_entry(self, index):
         entry = self.entries[index]
         self._selected_index = index
-        self._replace_text(self.note_text, entry.soap_text)
+        for key, widget in self.field_texts.items():
+            self._replace_text(widget, getattr(entry, key))
         self._replace_text(self.transcript_text, entry.transcript)
         self._mark_clean()
+
+    def _clear_fields(self):
+        for widget in self._all_text_widgets():
+            self._replace_text(widget, "")
 
     def _mark_clean(self):
         # Reset the widgets' modified flags so programmatic population isn't
         # mistaken for a vet edit.
-        self.note_text.edit_modified(False)
-        self.transcript_text.edit_modified(False)
+        for widget in self._all_text_widgets():
+            widget.edit_modified(False)
 
     def _has_unsaved_edits(self) -> bool:
-        return bool(
-            self.note_text.edit_modified() or self.transcript_text.edit_modified()
-        )
+        return any(widget.edit_modified() for widget in self._all_text_widgets())
 
     def _on_save_clicked(self):
         entry = self._selected_entry()
         if entry is None:
             return
-        soap_text = self.note_text.get("1.0", "end-1c")
+        fields = {
+            key: widget.get("1.0", "end-1c") for key, widget in self.field_texts.items()
+        }
         transcript = self.transcript_text.get("1.0", "end-1c")
-        updated = self.on_save_edit(entry.entry_id, soap_text, transcript)
+        updated = self.on_save_edit(entry.id, transcript=transcript, **fields)
         # Reflect the persisted edit locally so the next auto-refresh sees no
         # change and doesn't repaint (which would otherwise be a no-op flicker).
         if updated is not None and self._selected_index is not None:
@@ -240,34 +261,35 @@ class HistoryWindow(tk.Toplevel):
 
         # Remember which note we're regenerating so a late result is dropped if
         # the vet has since selected a different note.
-        entry_id = entry.entry_id
+        entry_id = entry.id
         self._set_regenerating(True)
 
         def work():
             try:
-                soap_text = self.on_regenerate(transcript)
+                note = self.on_regenerate(transcript)
             except Exception as exc:  # noqa: BLE001 -- surfaced to the vet below
                 # Bind exc as a default arg: Python clears the `except ... as`
                 # name when the block exits, before this after() callback runs.
                 self.after(0, lambda err=exc: self._on_regenerate_failed(err))
                 return
-            self.after(0, lambda: self._on_regenerate_done(entry_id, soap_text))
+            self.after(0, lambda: self._on_regenerate_done(entry_id, note))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _on_regenerate_done(self, entry_id, soap_text):
+    def _on_regenerate_done(self, entry_id, note):
         self._set_regenerating(False)
         current = self._selected_entry()
-        if current is None or current.entry_id != entry_id:
+        if current is None or current.id != entry_id:
             # The vet moved to another note while the backend was working; the
             # regenerated note belongs to a note that's no longer on screen.
             return
         # Show the fresh note as an unsaved edit -- the vet reviews it and hits
         # Save Changes to persist, so regeneration is never destructive on its
-        # own. Mark modified so the auto-refresh keeps the pane instead of
-        # repainting it from the store.
-        self._replace_text(self.note_text, soap_text)
-        self.note_text.edit_modified(True)
+        # own. Mark modified so the auto-refresh keeps the panes instead of
+        # repainting them from the store.
+        for key, widget in self.field_texts.items():
+            self._replace_text(widget, getattr(note, key))
+            widget.edit_modified(True)
 
     def _on_regenerate_failed(self, exc):
         self._set_regenerating(False)
@@ -308,7 +330,7 @@ class HistoryWindow(tk.Toplevel):
             return
         if not self._confirm_delete(entry):
             return
-        self.on_delete(entry.entry_id)
+        self.on_delete(entry.id)
         # Re-read the store rather than mutating locally, so what's shown always
         # matches what's persisted. Keep the vet near where they were: select the
         # note that slid into the deleted one's slot (or the new last note).
@@ -317,8 +339,7 @@ class HistoryWindow(tk.Toplevel):
         self._populate_listbox()
         if not self.entries:
             self._selected_index = None
-            self._replace_text(self.note_text, "")
-            self._replace_text(self.transcript_text, "")
+            self._clear_fields()
             self._mark_clean()
             return
         self._select(min(deleted_index, len(self.entries) - 1))

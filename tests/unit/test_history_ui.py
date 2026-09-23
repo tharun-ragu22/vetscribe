@@ -4,7 +4,7 @@ import uuid
 import pytest
 
 from vetscribe import history_ui, ui_strings
-from vetscribe.history_store import HistoryEntry
+from vetscribe.api_client import Exam, SoapNote
 from vetscribe.history_ui import HistoryWindow
 
 
@@ -27,17 +27,33 @@ def tk_root():
     root.destroy()
 
 
-def make_entry(subjective="sub", transcript="the owner reports vomiting", entry_id=None):
-    return HistoryEntry(
-        timestamp="2026-09-17T10:30:00",
-        subjective=subjective,
-        objective="obj",
-        assessment="assess",
-        plan="plan",
-        transcript=transcript,
+def make_entry(
+    subjective="sub",
+    transcript="the owner reports vomiting",
+    entry_id=None,
+    assessment="assess",
+    patient_name=None,
+):
+    return Exam(
         # Each entry needs a stable, unique id: the window preserves the vet's
         # selection across auto-refresh by matching on it.
-        entry_id=entry_id or uuid.uuid4().hex,
+        id=entry_id or uuid.uuid4().hex,
+        created_at="2026-09-17T10:30:00",
+        subjective=subjective,
+        objective="obj",
+        assessment=assessment,
+        plan="plan",
+        transcript=transcript,
+        patient_name=patient_name,
+    )
+
+
+def _note_pane(window):
+    # The four structured fields joined the way the vet reads them; lets the
+    # assertions below check content without caring which field it lands in.
+    return "\n".join(
+        f"{label.upper()}: {window.field_texts[key].get('1.0', 'end-1c')}"
+        for key, label in history_ui._SOAP_FIELDS
     )
 
 
@@ -50,7 +66,7 @@ def make_window(tk_root, entries, **overrides):
         load_entries=lambda: list(entries),
         on_copy_and_inject=lambda soap_text: None,
         on_copy_to_clipboard=lambda soap_text: None,
-        on_save_edit=lambda entry_id, soap_text, transcript: None,
+        on_save_edit=lambda entry_id, **fields: None,
         on_delete=lambda entry_id: None,
         # Deletion is destructive, so the window guards it behind a confirmation.
         # Default to "yes" in tests so the delete path runs without a real dialog;
@@ -75,6 +91,14 @@ def test_history_window_lists_one_row_per_entry(tk_root):
     assert any("second" in row for row in rows)
 
 
+def test_row_label_prefers_patient_name_when_present(tk_root):
+    entries = [make_entry(subjective="ignored snippet", patient_name="Rex")]
+
+    window = make_window(tk_root, entries)
+
+    assert any("Rex" in row for row in window.listbox.get(0, "end"))
+
+
 def test_selecting_an_entry_shows_its_note_and_transcript(tk_root):
     entries = [
         make_entry(subjective="Annual checkup", transcript="dog is well"),
@@ -84,23 +108,20 @@ def test_selecting_an_entry_shows_its_note_and_transcript(tk_root):
 
     window.show_entry(1)
 
-    note_text = window.note_text.get("1.0", "end-1c")
-    transcript_text = window.transcript_text.get("1.0", "end-1c")
-    assert "SUBJECTIVE: Dental cleaning" in note_text
-    assert "tartar buildup noted" in transcript_text
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "Dental cleaning"
+    assert "tartar buildup noted" in window.transcript_text.get("1.0", "end-1c")
 
 
 def test_window_shows_newest_entry_by_default(tk_root):
-    # Entries arrive newest-first (as HistoryStore.list_entries returns them),
-    # so the first entry should be shown without the user clicking anything.
+    # Entries arrive newest-first (as the store returns them), so the first
+    # entry should be shown without the user clicking anything.
     entries = [
         make_entry(subjective="Newest", transcript="latest transcript"),
         make_entry(subjective="Older", transcript="older transcript"),
     ]
     window = make_window(tk_root, entries)
 
-    note_text = window.note_text.get("1.0", "end-1c")
-    assert "SUBJECTIVE: Newest" in note_text
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "Newest"
 
 
 def test_copy_and_inject_button_sends_selected_entry_soap_text(tk_root):
@@ -153,7 +174,7 @@ def test_refresh_adds_newly_saved_note_and_shows_it_when_viewing_newest(tk_root)
     assert len(rows) == 2
     assert any("Brand new note" in row for row in rows)
     # The vet was on the newest entry, so the just-recorded note is shown for them.
-    assert "SUBJECTIVE: Brand new note" in window.note_text.get("1.0", "end-1c")
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "Brand new note"
     assert "brand new" in window.transcript_text.get("1.0", "end-1c")
 
 
@@ -170,7 +191,7 @@ def test_refresh_preserves_a_deliberately_selected_older_note(tk_root):
 
     # The list grows, but the note the vet is reading is not yanked away.
     assert len(window.listbox.get(0, "end")) == 3
-    assert "SUBJECTIVE: Older" in window.note_text.get("1.0", "end-1c")
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "Older"
     assert "older" in window.transcript_text.get("1.0", "end-1c")
 
 
@@ -183,7 +204,7 @@ def test_refresh_populates_from_empty_when_first_note_arrives(tk_root):
     window.refresh()
 
     assert len(window.listbox.get(0, "end")) == 1
-    assert "SUBJECTIVE: First ever" in window.note_text.get("1.0", "end-1c")
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "First ever"
 
 
 def test_refresh_is_a_noop_when_nothing_changed(tk_root):
@@ -198,29 +219,32 @@ def test_refresh_is_a_noop_when_nothing_changed(tk_root):
 
     # Selection is undisturbed and the list is unchanged.
     assert len(window.listbox.get(0, "end")) == 2
-    assert "SUBJECTIVE: Older" in window.note_text.get("1.0", "end-1c")
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "Older"
 
 
-def test_editing_and_saving_sends_the_edited_text_to_the_save_callback(tk_root):
+def test_editing_and_saving_sends_the_structured_fields_to_the_save_callback(tk_root):
     saved = []
     entry = make_entry(subjective="Annual checkup", transcript="orig", entry_id="n1")
     window = make_window(
         tk_root,
         [entry],
-        on_save_edit=lambda entry_id, soap_text, transcript: saved.append(
-            (entry_id, soap_text, transcript)
-        ),
+        on_save_edit=lambda entry_id, **fields: saved.append((entry_id, fields)),
     )
     window.show_entry(0)
 
-    # The vet edits both panes, then saves.
-    window.note_text.delete("1.0", "end")
-    window.note_text.insert("1.0", "SUBJECTIVE: corrected note")
+    # The vet edits a field and the transcript, then saves.
+    window.field_texts["assessment"].delete("1.0", "end")
+    window.field_texts["assessment"].insert("1.0", "corrected assessment")
     window.transcript_text.delete("1.0", "end")
     window.transcript_text.insert("1.0", "corrected transcript")
     window.save_button.invoke()
 
-    assert saved == [("n1", "SUBJECTIVE: corrected note", "corrected transcript")]
+    assert len(saved) == 1
+    entry_id, fields = saved[0]
+    assert entry_id == "n1"
+    assert fields["assessment"] == "corrected assessment"
+    assert fields["subjective"] == "Annual checkup"
+    assert fields["transcript"] == "corrected transcript"
 
 
 def test_delete_button_removes_selected_note_and_shows_a_neighbor(tk_root):
@@ -233,7 +257,7 @@ def test_delete_button_removes_selected_note_and_shows_a_neighbor(tk_root):
     def on_delete(entry_id):
         # The window re-reads the store after deleting, so mirror the removal in
         # the source list that load_entries() reads from.
-        entries[:] = [e for e in entries if e.entry_id != entry_id]
+        entries[:] = [e for e in entries if e.id != entry_id]
         deleted.append(entry_id)
 
     window = make_window(tk_root, entries, on_delete=on_delete)
@@ -246,7 +270,7 @@ def test_delete_button_removes_selected_note_and_shows_a_neighbor(tk_root):
     assert len(rows) == 1
     assert any("Older" in row for row in rows)
     # A neighbor is selected so the detail pane isn't left showing a stale note.
-    assert "SUBJECTIVE: Older" in window.note_text.get("1.0", "end-1c")
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "Older"
     assert "older" in window.transcript_text.get("1.0", "end-1c")
 
 
@@ -254,7 +278,7 @@ def test_delete_of_the_last_note_clears_the_detail_panes(tk_root):
     entries = [make_entry(subjective="Only note", transcript="only", entry_id="n1")]
 
     def on_delete(entry_id):
-        entries[:] = [e for e in entries if e.entry_id != entry_id]
+        entries[:] = [e for e in entries if e.id != entry_id]
 
     window = make_window(tk_root, entries, on_delete=on_delete)
     window.show_entry(0)
@@ -262,7 +286,7 @@ def test_delete_of_the_last_note_clears_the_detail_panes(tk_root):
     window.delete_button.invoke()
 
     assert window.listbox.get(0, "end") == ()
-    assert window.note_text.get("1.0", "end-1c") == ""
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == ""
     assert window.transcript_text.get("1.0", "end-1c") == ""
 
 
@@ -281,7 +305,7 @@ def test_delete_does_nothing_when_the_vet_cancels_the_confirmation(tk_root):
 
     assert deleted == []
     assert len(window.listbox.get(0, "end")) == 1
-    assert "SUBJECTIVE: Only note" in window.note_text.get("1.0", "end-1c")
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "Only note"
 
 
 def test_delete_button_is_a_safe_noop_with_nothing_selected(tk_root):
@@ -313,7 +337,12 @@ def test_regenerate_sends_edited_transcript_and_shows_note_as_unsaved_edit(
 
     def fake_regenerate(transcript):
         received.append(transcript)
-        return "SUBJECTIVE: regenerated from the corrected transcript"
+        return SoapNote(
+            subjective="regenerated subjective",
+            objective="regenerated objective",
+            assessment="regenerated assessment",
+            plan="regenerated plan",
+        )
 
     entry = make_entry(subjective="Original", transcript="orig", entry_id="n1")
     window = make_window(tk_root, [entry], on_regenerate=fake_regenerate)
@@ -326,11 +355,10 @@ def test_regenerate_sends_edited_transcript_and_shows_note_as_unsaved_edit(
     window.update()  # flush the after(0) that applies the result
 
     assert received == ["corrected transcript"]
-    assert "regenerated from the corrected transcript" in window.note_text.get(
-        "1.0", "end-1c"
-    )
+    assert window.field_texts["assessment"].get("1.0", "end-1c") == "regenerated assessment"
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "regenerated subjective"
     # Left as an unsaved edit so nothing is persisted until the vet hits Save.
-    assert window.note_text.edit_modified()
+    assert window._has_unsaved_edits()
     assert window.regenerate_button["text"] == ui_strings.BUTTON_REGENERATE
 
 
@@ -344,7 +372,7 @@ def test_regenerate_with_empty_transcript_warns_and_skips_backend(tk_root, monke
 
     entry = make_entry(subjective="Original", transcript="   ", entry_id="n1")
     window = make_window(
-        tk_root, [entry], on_regenerate=lambda t: called.append(t) or "x"
+        tk_root, [entry], on_regenerate=lambda t: called.append(t) or SoapNote("x", "x", "x", "x")
     )
     window.show_entry(0)
 
@@ -359,15 +387,17 @@ def test_regenerate_result_is_dropped_when_the_vet_selected_another_note(tk_root
         make_entry(subjective="Newest", transcript="a", entry_id="n1"),
         make_entry(subjective="Older", transcript="b", entry_id="n2"),
     ]
-    window = make_window(tk_root, entries, on_regenerate=lambda t: "unused")
+    window = make_window(tk_root, entries, on_regenerate=lambda t: SoapNote("x", "x", "x", "x"))
     window.show_entry(1)  # currently on n2
 
     # A regenerate that was kicked off for n1 finishes late.
-    window._on_regenerate_done("n1", "SUBJECTIVE: stale result for n1")
+    window._on_regenerate_done(
+        "n1", SoapNote("stale subjective", "s", "stale result", "p")
+    )
 
     # The pane still shows n2; the stale note is not painted over it.
-    assert "SUBJECTIVE: Older" in window.note_text.get("1.0", "end-1c")
-    assert "stale result" not in window.note_text.get("1.0", "end-1c")
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "Older"
+    assert "stale result" not in _note_pane(window)
 
 
 def test_regenerate_failure_surfaces_an_error_and_re_enables_the_button(
@@ -385,14 +415,14 @@ def test_regenerate_failure_surfaces_an_error_and_re_enables_the_button(
     entry = make_entry(subjective="Original", transcript="orig", entry_id="n1")
     window = make_window(tk_root, [entry], on_regenerate=boom)
     window.show_entry(0)
-    note_before = window.note_text.get("1.0", "end-1c")
+    note_before = _note_pane(window)
 
     window.regenerate_button.invoke()
     window.update()  # flush the after(0) that surfaces the failure
 
     assert len(errors) == 1
     # The note is left untouched and the button is usable again.
-    assert window.note_text.get("1.0", "end-1c") == note_before
+    assert _note_pane(window) == note_before
     assert window._regenerating is False
     assert window.regenerate_button["text"] == ui_strings.BUTTON_REGENERATE
 
@@ -403,8 +433,8 @@ def test_auto_refresh_does_not_discard_an_in_progress_unsaved_edit(tk_root):
     window.show_entry(0)
 
     # The vet starts editing but has not saved yet...
-    window.note_text.delete("1.0", "end")
-    window.note_text.insert("1.0", "half-typed edit")
+    window.field_texts["subjective"].delete("1.0", "end")
+    window.field_texts["subjective"].insert("1.0", "half-typed edit")
 
     # ...and a new note is recorded, triggering an auto-refresh.
     entries.insert(0, make_entry(subjective="Just recorded", transcript="new", entry_id="n2"))
@@ -412,4 +442,4 @@ def test_auto_refresh_does_not_discard_an_in_progress_unsaved_edit(tk_root):
 
     # The new note shows up in the list, but the unsaved edit is NOT clobbered.
     assert len(window.listbox.get(0, "end")) == 2
-    assert window.note_text.get("1.0", "end-1c") == "half-typed edit"
+    assert window.field_texts["subjective"].get("1.0", "end-1c") == "half-typed edit"

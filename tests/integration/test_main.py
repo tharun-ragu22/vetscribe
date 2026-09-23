@@ -3,7 +3,7 @@ import time
 from dataclasses import replace
 from unittest.mock import MagicMock
 
-from vetscribe.api_client import ApiClient, SoapNote
+from vetscribe.api_client import ApiClient, Exam, SoapNote
 from vetscribe.audio_recorder import AudioRecorder
 from vetscribe.avimark_injector import AvimarkInjector
 from vetscribe.config import Config
@@ -387,14 +387,27 @@ def test_build_app_wires_offline_queue_into_pipeline_and_tray_app():
     assert tray_app.offline_queue.api_client is tray_app.pipeline.api_client
 
 
-def test_view_history_opens_window_with_notes_from_both_save_paths(mocker, tmp_path):
-    # The history the user browses must be the same store the live pipeline and
-    # the offline-queue retry both write into -- so a note from either path
-    # shows up when they open the history window.
+def test_view_history_opens_window_reading_the_shared_backend_history(mocker, tmp_path):
+    # The history the user browses is the backend's shared exam store -- the same
+    # records the mobile app reads -- so opening the window surfaces every note,
+    # whether it was recorded on this desktop or on a phone.
     mock_history_window = mocker.patch("vetscribe.main.HistoryWindow")
     mocker.patch(
-        "vetscribe.history_store.get_history_dir", return_value=tmp_path / "history"
+        "vetscribe.backend_history_store.get_cache_path",
+        return_value=tmp_path / "history_cache.json",
     )
+    exams = [
+        Exam(
+            id="e1",
+            created_at="2026-09-22T00:00:01Z",
+            subjective="from the backend",
+            objective="o",
+            assessment="a",
+            plan="p",
+            transcript="tx",
+        )
+    ]
+    mocker.patch.object(ApiClient, "fetch_history", return_value=exams)
     config = Config(
         api_endpoint="https://example.test/soap",
         api_timeout_seconds=15,
@@ -403,41 +416,52 @@ def test_view_history_opens_window_with_notes_from_both_save_paths(mocker, tmp_p
     tk_root = MagicMock()
 
     tray_app, _, _ = build_app(config=config, tk_root=tk_root)
-    tray_app.pipeline.history_store.save(
-        SoapNote(subjective="from pipeline", objective="o", assessment="a", plan="p")
-    )
-    tray_app.offline_queue.history_store.save(
-        SoapNote(subjective="from retry", objective="o", assessment="a", plan="p")
-    )
-
     tray_app.show_history()
 
     mock_history_window.assert_called_once()
     _, kwargs = mock_history_window.call_args
     assert kwargs["master"] is tk_root
-    # The window is handed a callable that reads the shared store live, so it can
-    # refresh; calling it must surface notes written via either save path.
+    # The window is handed a callable that reads the shared backend history live,
+    # so calling it surfaces the exams the backend serves.
     entries = kwargs["load_entries"]()
-    subjectives = [entry.subjective for entry in entries]
-    assert "from pipeline" in subjectives
-    assert "from retry" in subjectives
+    assert [entry.subjective for entry in entries] == ["from the backend"]
 
-    # The window's save callback must persist an edit back into the same store.
-    target = next(e for e in entries if e.subjective == "from pipeline")
+    # The window's save callback persists a structured edit back through the
+    # backend, so it syncs to every device.
+    update_mock = mocker.patch.object(
+        ApiClient,
+        "update_exam",
+        return_value=Exam(
+            id="e1",
+            created_at="2026-09-22T00:00:01Z",
+            subjective="edited",
+            objective="o",
+            assessment="a",
+            plan="p",
+            transcript="edited transcript",
+        ),
+    )
     kwargs["on_save_edit"](
-        target.entry_id, soap_text="SUBJECTIVE: edited", transcript="edited transcript"
+        "e1",
+        subjective="edited",
+        objective="o",
+        assessment="a",
+        plan="p",
+        transcript="edited transcript",
     )
-    edited = next(
-        e for e in kwargs["load_entries"]() if e.entry_id == target.entry_id
+    update_mock.assert_called_once_with(
+        "e1",
+        subjective="edited",
+        objective="o",
+        assessment="a",
+        plan="p",
+        transcript="edited transcript",
     )
-    assert edited.soap_text == "SUBJECTIVE: edited"
-    assert edited.transcript == "edited transcript"
 
-    # The window's delete callback must remove the note (and its transcript) from
-    # the same shared store.
-    kwargs["on_delete"](target.entry_id)
-    remaining_ids = [e.entry_id for e in kwargs["load_entries"]()]
-    assert target.entry_id not in remaining_ids
+    # The window's delete callback removes the note through the backend.
+    delete_mock = mocker.patch.object(ApiClient, "delete_exam")
+    kwargs["on_delete"]("e1")
+    delete_mock.assert_called_once_with("e1")
 
 
 def test_build_app_wires_injection_poller_to_api_client_and_tray_app():
