@@ -83,8 +83,13 @@ export function HistoryScreen({ apiClient, onOpenExam }: HistoryScreenProps) {
           style={styles.row}
           onPress={() => onOpenExam?.(item.id)}
         >
-          <Text style={styles.patient}>{item.patientName ?? 'Unknown patient'}</Text>
-          <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
+          {/* Exams rarely carry a patient name yet, so fall back to the creation
+              date as the heading rather than a useless "Unknown patient". */}
+          <Text style={styles.patient}>{item.patientName ?? formatDate(item.createdAt)}</Text>
+          {/* Only show the date as a subtitle when it isn't already the heading. */}
+          {item.patientName ? (
+            <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
+          ) : null}
           <Text style={styles.snippet} numberOfLines={2}>
             {item.assessment || item.subjective || 'No note yet'}
           </Text>

@@ -18,7 +18,10 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
   };
 }
 
-type EditorApi = Pick<ApiClient, 'updateExam' | 'requestInjection' | 'deleteExam'>;
+type EditorApi = Pick<
+  ApiClient,
+  'updateExam' | 'requestInjection' | 'deleteExam' | 'regenerateNote'
+>;
 
 function makeApiClient(overrides: Partial<EditorApi> = {}): EditorApi {
   return {
@@ -31,6 +34,13 @@ function makeApiClient(overrides: Partial<EditorApi> = {}): EditorApi {
       outcome: null,
     })),
     deleteExam: jest.fn(async () => {}),
+    regenerateNote: jest.fn(async (transcript: string) => ({
+      subjective: 'S2',
+      objective: 'O2',
+      assessment: 'A2',
+      plan: 'P2',
+      transcript,
+    })),
     ...overrides,
   } as unknown as EditorApi;
 }
@@ -75,6 +85,60 @@ describe('ExamEditor', () => {
     fireEvent.press(screen.getByText(/save changes/i));
 
     await waitFor(() => expect(screen.getByText(/502/)).toBeTruthy());
+  });
+
+  it('regenerates the note from the edited transcript and updates the SOAP fields', async () => {
+    const apiClient = makeApiClient();
+    render(<ExamEditor exam={makeExam()} apiClient={apiClient} />);
+
+    // The vet hand-corrects the transcript, then regenerates from it.
+    fireEvent.changeText(screen.getByTestId('field-transcript'), 'vet: corrected words');
+    fireEvent.press(screen.getByText(/regenerate from transcript/i));
+
+    await waitFor(() => expect(screen.getByText(/regenerated/i)).toBeTruthy());
+    expect(apiClient.regenerateNote).toHaveBeenCalledWith('vet: corrected words');
+    expect(screen.getByTestId('field-subjective').props.value).toBe('S2');
+    expect(screen.getByTestId('field-objective').props.value).toBe('O2');
+    expect(screen.getByTestId('field-assessment').props.value).toBe('A2');
+    expect(screen.getByTestId('field-plan').props.value).toBe('P2');
+    // The edited transcript is preserved, not overwritten.
+    expect(screen.getByTestId('field-transcript').props.value).toBe('vet: corrected words');
+  });
+
+  it('regeneration is non-destructive — it does not save until the vet taps Save', async () => {
+    const apiClient = makeApiClient();
+    render(<ExamEditor exam={makeExam()} apiClient={apiClient} />);
+
+    fireEvent.press(screen.getByText(/regenerate from transcript/i));
+
+    await waitFor(() => expect(screen.getByText(/regenerated/i)).toBeTruthy());
+    // Nothing persisted by the regenerate itself.
+    expect(apiClient.updateExam).not.toHaveBeenCalled();
+
+    // Saving afterwards persists the regenerated fields.
+    fireEvent.press(screen.getByText(/save changes/i));
+    await waitFor(() => expect(apiClient.updateExam).toHaveBeenCalledTimes(1));
+    expect(apiClient.updateExam).toHaveBeenCalledWith('exam-1', {
+      subjective: 'S2',
+      objective: 'O2',
+      assessment: 'A2',
+      plan: 'P2',
+      transcript: 'vet: hello',
+    });
+  });
+
+  it('surfaces a regeneration failure', async () => {
+    const apiClient = makeApiClient({
+      regenerateNote: jest.fn(async () => {
+        throw new Error('backend returned 502');
+      }),
+    });
+    render(<ExamEditor exam={makeExam()} apiClient={apiClient} />);
+
+    fireEvent.press(screen.getByText(/regenerate from transcript/i));
+
+    await waitFor(() => expect(screen.getByText(/502/)).toBeTruthy());
+    expect(apiClient.updateExam).not.toHaveBeenCalled();
   });
 
   it('requests a remote AVImark injection for this exam and confirms it was sent', async () => {

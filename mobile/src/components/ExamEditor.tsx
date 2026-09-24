@@ -6,8 +6,14 @@ import type { Exam, SoapNote } from '../services/api/types';
 
 export interface ExamEditorProps {
   exam: Exam;
-  /** Editing writes through updateExam; Inject uses requestInjection; Delete uses deleteExam. */
-  apiClient: Pick<ApiClient, 'updateExam' | 'requestInjection' | 'deleteExam'>;
+  /**
+   * Editing writes through updateExam; Inject uses requestInjection; Delete uses deleteExam;
+   * Regenerate uses regenerateNote to re-run note generation from the edited transcript.
+   */
+  apiClient: Pick<
+    ApiClient,
+    'updateExam' | 'requestInjection' | 'deleteExam' | 'regenerateNote'
+  >;
   /** Called with the persisted exam after a successful save. */
   onSaved?: (exam: Exam) => void;
   /** Called after the exam is deleted from the backend (e.g. to navigate away). */
@@ -24,6 +30,10 @@ const SECTIONS: ReadonlyArray<readonly [keyof SoapNote, string]> = [
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 type InjectStatus = 'idle' | 'sending' | 'sent' | 'error';
+// Regeneration re-runs note generation over the (hand-corrected) transcript. It's
+// non-destructive: the fresh note lands as an unsaved edit until the vet taps Save,
+// mirroring the desktop History window.
+type RegenStatus = 'idle' | 'regenerating' | 'done' | 'error';
 // Deleting is destructive and irreversible, so it takes a confirming second tap
 // (mirrors the desktop History window's confirmation dialog).
 type DeleteStatus = 'idle' | 'confirm' | 'deleting' | 'error';
@@ -55,11 +65,14 @@ export function ExamEditor({ exam, apiClient, onSaved, onDeleted }: ExamEditorPr
   const [injectError, setInjectError] = useState<string | null>(null);
   const [deleteStatus, setDeleteStatus] = useState<DeleteStatus>('idle');
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [regenStatus, setRegenStatus] = useState<RegenStatus>('idle');
+  const [regenError, setRegenError] = useState<string | null>(null);
 
   const setField = (key: keyof SoapNote, value: string) => {
     setNote((current) => ({ ...current, [key]: value }));
-    // Any edit invalidates a prior "Saved" confirmation.
+    // Any edit invalidates a prior "Saved"/"Regenerated" confirmation.
     setSaveStatus('idle');
+    setRegenStatus('idle');
   };
 
   const handleSave = async () => {
@@ -87,6 +100,23 @@ export function ExamEditor({ exam, apiClient, onSaved, onDeleted }: ExamEditorPr
     }
   };
 
+  const handleRegenerate = async () => {
+    setRegenStatus('regenerating');
+    setRegenError(null);
+    try {
+      const fresh = await apiClient.regenerateNote(note.transcript);
+      // Merge the fresh S/O/A/P over the current note. regenerateNote echoes the
+      // transcript back, so spreading keeps the vet's edited transcript intact. This
+      // is an *unsaved* edit — nothing is persisted until the vet taps Save Changes.
+      setNote((current) => ({ ...current, ...fresh }));
+      setSaveStatus('idle');
+      setRegenStatus('done');
+    } catch (e) {
+      setRegenError(messageOf(e));
+      setRegenStatus('error');
+    }
+  };
+
   const handleDelete = async () => {
     // First tap arms the confirmation; the second tap actually deletes.
     if (deleteStatus === 'idle' || deleteStatus === 'error') {
@@ -105,6 +135,8 @@ export function ExamEditor({ exam, apiClient, onSaved, onDeleted }: ExamEditorPr
     }
   };
 
+  const regenLabel =
+    regenStatus === 'regenerating' ? 'Regenerating…' : 'Regenerate from Transcript';
   const saveLabel = saveStatus === 'saving' ? 'Saving…' : 'Save Changes';
   const injectLabel = injectStatus === 'sending' ? 'Sending…' : 'Inject into AVImark';
   const deleteLabel =
@@ -130,6 +162,21 @@ export function ExamEditor({ exam, apiClient, onSaved, onDeleted }: ExamEditorPr
           />
         </View>
       ))}
+
+      <Pressable
+        accessibilityRole="button"
+        style={[styles.button, styles.regen, regenStatus === 'regenerating' && styles.busy]}
+        onPress={handleRegenerate}
+        disabled={regenStatus === 'regenerating'}
+      >
+        <Text style={styles.buttonText}>{regenLabel}</Text>
+      </Pressable>
+      {regenStatus === 'done' ? (
+        <Text style={styles.ok}>Regenerated — review and Save to keep it.</Text>
+      ) : null}
+      {regenStatus === 'error' ? (
+        <Text style={styles.error}>Regenerate failed: {regenError}</Text>
+      ) : null}
 
       <Pressable
         accessibilityRole="button"
@@ -208,6 +255,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+  },
+  regen: {
+    backgroundColor: '#5b3a8c',
   },
   save: {
     backgroundColor: '#1b3a5b',
