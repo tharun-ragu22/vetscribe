@@ -70,7 +70,9 @@ def create_app(
             return _provider_error_response(exc)
 
         # Persist so the note syncs to every device (mobile + desktop history).
-        exam = store.add(result.note, result.transcript)
+        exam = store.add(
+            result.note, result.transcript, patient_name=result.note.patient_name
+        )
         return JSONResponse(exam.to_dict())
 
     @app.post("/api/soap/regenerate")

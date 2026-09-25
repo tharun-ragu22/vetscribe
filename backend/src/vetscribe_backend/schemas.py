@@ -7,6 +7,9 @@ class SoapNote:
     objective: str
     assessment: str
     plan: str
+    # The patient's name if it was stated in the transcript, else None. Lets the
+    # History lists (desktop + mobile) label an exam by patient instead of a timestamp.
+    patient_name: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)

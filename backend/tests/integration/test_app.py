@@ -50,6 +50,20 @@ def test_create_soap_note_returns_200_with_note_and_transcript_json(make_config)
     assert pipeline.received_audio == b"RIFF....audio...."
 
 
+def test_create_soap_note_persists_patient_name_from_the_note(make_config):
+    note = SoapNote(
+        subjective="s", objective="o", assessment="a", plan="p", patient_name="Bella"
+    )
+    pipeline = FakePipeline(note=note, transcript="Bella, three-year-old spayed lab")
+    app = create_app(config=make_config(), pipeline=pipeline)
+    client = TestClient(app)
+
+    response = client.post("/api/soap", content=b"RIFF....audio....")
+
+    assert response.status_code == 200
+    assert response.json()["patient_name"] == "Bella"
+
+
 def test_create_soap_note_rejects_missing_bearer_token_when_backend_api_key_configured(
     make_config,
 ):
@@ -149,6 +163,7 @@ def test_regenerate_returns_200_with_note_from_transcript(make_config):
         "objective": "o",
         "assessment": "a",
         "plan": "p",
+        "patient_name": None,
         "transcript": "the corrected transcript",
     }
     assert pipeline.received_transcript == "the corrected transcript"

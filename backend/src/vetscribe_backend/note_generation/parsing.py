@@ -26,6 +26,8 @@ def parse_soap_json(raw_text: str) -> SoapNote:
             objective=data["objective"],
             assessment=data["assessment"],
             plan=data["plan"],
+            # Optional: models that omit it (or emit null) leave the exam unlabelled.
+            patient_name=data.get("patient_name") or None,
         )
     except KeyError as exc:
         raise NoteParsingError(f"model response missing field: {exc}") from exc
